@@ -15,15 +15,6 @@ import { AsyncPipe } from '@angular/common';
         RegiScope
       </h1>
 
-      <!-- Dashboard -->
-      <a
-        routerLink="/"
-        routerLinkActive="bg-blue-50 text-blue-700"
-        class="px-4 py-2 rounded-lg hover:bg-gray-100"
-      >
-        Dashboard
-      </a>
-
       <!-- Account -->
       <a
         routerLink="/account"
