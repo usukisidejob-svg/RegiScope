@@ -1,28 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { AccountViewModel } from '../../models/account.model';
-
-// 開発用のモックアカウント
-const MOCK_ACCOUNTS: AccountViewModel[] = [
-    {
-        id: 'account-001',
-        email: 'sample.user@gmail.com',
-        displayName: 'Sample User',
-        isActive: true,
-        hasScanned: false,
-        createdAt: new Date(),
-        status: 'connected',
-    },
-    {
-        id: 'account-002',
-        email: 'work.user@gmail.com',
-        displayName: 'Work User',
-        isActive: true,
-        hasScanned: false,
-        createdAt: new Date(),
-        status: 'connected',
-    },
-];
+import { MOCK_ACCOUNTS } from '../constants/mock-data';
 
 @Injectable({
     providedIn: 'root',
