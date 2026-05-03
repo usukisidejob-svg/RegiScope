@@ -49,6 +49,26 @@ export class AccountService {
 
     /**
      * 【action】
+     * Gmailアカウントを追加する
+     * 開発中は入力されたメールアドレスからモックアカウントを作成する
+     */
+    addAccount(email: string): void {
+        const newAccount: AccountViewModel = {
+            id: `account-${Date.now()}`,
+            email,
+            displayName: email,
+            isActive: true,
+            hasScanned: false,
+            createdAt: new Date(),
+            status: 'connected',
+        };
+
+        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
+        this.switchAccount(newAccount.id);
+    }
+
+    /**
+     * 【action】
      * スキャン完了状態に更新する
      * スキャン処理完了後に呼び出す
      * → hasScanned = true によってSource画面が有効化される
