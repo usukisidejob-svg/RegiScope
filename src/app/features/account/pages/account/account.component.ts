@@ -1,12 +1,14 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { combineLatest, map } from 'rxjs';
 import { AccountService } from '../../../../core/services/account.service';
 
 @Component({
-  selector: 'app-account',
-  standalone: true,
-  imports: [AsyncPipe],
-  template: `
+    selector: 'app-account',
+    standalone: true,
+    imports: [AsyncPipe, RouterLink],
+    template: `
     <section class="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 class="text-3xl font-bold text-gray-900">Account</h1>
@@ -71,16 +73,58 @@ import { AccountService } from '../../../../core/services/account.service';
           </div>
         }
       </div>
+      @if (currentAccount$ | async; as currentAccount) {
+        <div class="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+          <h2 class="text-2xl font-bold text-gray-900">メールスキャン</h2>
+          <p class="mt-6 text-lg text-gray-600">
+            Gmailの受信トレイをスキャンして、登録先候補（メルマガ、支払い、アカウント等）を抽出します。
+          </p>
+
+          <button
+            type="button"
+            class="mt-8 w-full rounded-xl bg-blue-600 px-4 py-5 text-xl font-bold text-white transition hover:bg-blue-700"
+            (click)="onScan()"
+          >
+            ↻ {{ currentAccount.hasScanned ? '再スキャン' : 'スキャン開始' }}
+          </button>
+
+          @if (currentAccount.hasScanned) {
+            <a
+              routerLink="/sources"
+              class="mt-4 block w-full rounded-xl bg-gray-100 px-4 py-5 text-center text-xl font-bold text-gray-700 transition hover:bg-gray-200"
+            >
+              スキャン結果を見る（Sources画面へ）
+            </a>
+          }
+        </div>
+      }
     </section>
   `,
 })
 export class AccountComponent {
-  private accountService = inject(AccountService);
+    private accountService = inject(AccountService);
 
-  accounts$ = this.accountService.accounts$;
-  currentAccountId$ = this.accountService.currentAccountId$;
+    accounts$ = this.accountService.accounts$;
+    currentAccountId$ = this.accountService.currentAccountId$;
+    currentAccount$ = combineLatest([
+        this.accountService.accounts$,
+        this.accountService.currentAccountId$,
+    ]).pipe(
+        map(([accounts, currentAccountId]) =>
+            accounts.find((account) => account.id === currentAccountId)
+        )
+    );
 
-  switchAccount(accountId: string): void {
-    this.accountService.switchAccount(accountId);
-  }
+    switchAccount(accountId: string): void {
+        this.accountService.switchAccount(accountId);
+    }
+    onScan(): void {
+        const account = this.accountService.getCurrentAccount();
+
+        if (!account) {
+            return;
+        }
+
+        this.accountService.markAsScanned(account.id);
+    }
 }
