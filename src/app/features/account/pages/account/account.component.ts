@@ -1,6 +1,5 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { combineLatest, map } from 'rxjs';
 import { AccountService } from '../../../../core/services/account.service';
@@ -8,7 +7,7 @@ import { AccountService } from '../../../../core/services/account.service';
 @Component({
     selector: 'app-account',
     standalone: true,
-    imports: [AsyncPipe, FormsModule, RouterLink],
+    imports: [AsyncPipe, RouterLink],
     template: `
     <section class="mx-auto max-w-4xl space-y-6">
       <div>
@@ -73,28 +72,17 @@ import { AccountService } from '../../../../core/services/account.service';
             }
 
             @if (isAddingAccount) {
-              <form
-                class="rounded-lg border border-dashed border-blue-300 bg-blue-50 p-4"
-                (ngSubmit)="addAccount()"
-              >
-                <label for="new-account-email" class="text-sm font-medium text-gray-700">
-                  追加するGmailアドレス
-                </label>
-                <div class="mt-2 flex gap-2">
-                  <input
-                    id="new-account-email"
-                    name="newAccountEmail"
-                    type="email"
-                    required
-                    [(ngModel)]="newAccountEmail"
-                    placeholder="example@gmail.com"
-                    class="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              <div class="rounded-lg border border-dashed border-blue-300 bg-blue-50 p-4">
+                <p class="text-sm font-medium text-gray-700">
+                  Googleアカウントを選択してGmailへのアクセスを許可します。
+                </p>
+                <div class="mt-3 flex gap-2">
                   <button
-                    type="submit"
+                    type="button"
                     class="rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700"
+                    (click)="connectGoogleAccount()"
                   >
-                    追加
+                    Googleで認証
                   </button>
                   <button
                     type="button"
@@ -104,7 +92,7 @@ import { AccountService } from '../../../../core/services/account.service';
                     キャンセル
                   </button>
                 </div>
-              </form>
+              </div>
             } @else {
               <button
                 type="button"
@@ -151,7 +139,6 @@ export class AccountComponent {
     accounts$ = this.accountService.accounts$;
     currentAccountId$ = this.accountService.currentAccountId$;
     isAddingAccount = false;
-    newAccountEmail = '';
 
     currentAccount$ = combineLatest([
         this.accountService.accounts$,
@@ -172,17 +159,10 @@ export class AccountComponent {
 
     cancelAddAccount(): void {
         this.isAddingAccount = false;
-        this.newAccountEmail = '';
     }
 
-    addAccount(): void {
-        const email = this.newAccountEmail.trim();
-
-        if (!email) {
-            return;
-        }
-
-        this.accountService.addAccount(email);
+    connectGoogleAccount(): void {
+        this.accountService.connectGoogleAccount();
         this.cancelAddAccount();
     }
 

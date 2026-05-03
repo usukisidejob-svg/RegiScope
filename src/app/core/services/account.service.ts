@@ -49,10 +49,12 @@ export class AccountService {
 
     /**
      * 【action】
-     * Gmailアカウントを追加する
-     * 開発中は入力されたメールアドレスからモックアカウントを作成する
+     * Google認証でGmailアカウントを接続する
+     * 開発中は認証後に取得するメールアドレスをモックで作成する
      */
-    addAccount(email: string): void {
+    connectGoogleAccount(): void {
+        const accountNumber = this.accountsSubject.value.length + 1;
+        const email = `connected.${accountNumber}@gmail.com`;
         const newAccount: AccountViewModel = {
             id: `account-${Date.now()}`,
             email,
