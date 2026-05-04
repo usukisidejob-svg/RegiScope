@@ -243,6 +243,10 @@ export class SourcesComponent {
         return false;
       }
 
+      if (!this.matchesSearchQuery(source)) {
+        return false;
+      }
+
       return true;
     });
 
@@ -288,6 +292,24 @@ export class SourcesComponent {
     }
 
     return date >= threshold;
+  }
+
+  private matchesSearchQuery(source: RegistrationSource): boolean {
+    const query = this.sourceService.searchQuery().trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    const searchableText = [
+      source.displayName,
+      source.domain,
+      source.senderEmail,
+      source.category,
+      source.confidence,
+    ].join(' ').toLowerCase();
+
+    return searchableText.includes(query);
   }
 
   getGmailSearchUrl(source: RegistrationSource): string {
