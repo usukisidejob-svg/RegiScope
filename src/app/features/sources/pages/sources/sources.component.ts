@@ -43,6 +43,25 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </div>
         </div>
         <div>
+          <p class="mb-3 text-sm font-semibold text-gray-700">期間</p>
+
+          <div class="flex flex-wrap gap-2">
+            @for (period of periodOptions; track period.value) {
+              <button
+                type="button"
+                class="rounded-full px-4 py-2 text-sm font-medium transition"
+                [class.bg-blue-600]="selectedPeriod === period.value"
+                [class.text-white]="selectedPeriod === period.value"
+                [class.bg-gray-100]="selectedPeriod !== period.value"
+                [class.text-gray-700]="selectedPeriod !== period.value"
+                (click)="selectedPeriod = period.value"
+              >
+                {{ period.label }}
+              </button>
+            }
+          </div>
+        </div>
+        <div>
           <p class="mb-3 text-sm font-semibold text-gray-700">カテゴリ</p>
 
           <div class="flex flex-wrap gap-2">
@@ -186,6 +205,16 @@ export class SourcesComponent {
     { value: 'urgentFirst', label: '緊急優先' },
   ] as const;
 
+  selectedPeriod: 'all' | '1m' | '3m' | '6m' | '1y' = 'all';
+
+  periodOptions = [
+    { value: 'all', label: 'すべて' },
+    { value: '1m', label: '直近1ヶ月' },
+    { value: '3m', label: '直近3ヶ月' },
+    { value: '6m', label: '半年' },
+    { value: '1y', label: '1年' },
+  ] as const;
+
   private getConfidenceScore(confidence: 'high' | 'medium' | 'low'): number {
     const scores = {
       high: 3,
@@ -210,6 +239,10 @@ export class SourcesComponent {
         return false;
       }
 
+      if (!this.isWithinSelectedPeriod(source.lastSeen)) {
+        return false;
+      }
+
       return true;
     });
 
@@ -229,6 +262,34 @@ export class SourcesComponent {
       return 0;
     });
   }
+
+  private isWithinSelectedPeriod(date: Date): boolean {
+    if (this.selectedPeriod === 'all') {
+      return true;
+    }
+
+    const now = new Date();
+    const threshold = new Date(now);
+
+    if (this.selectedPeriod === '1m') {
+      threshold.setMonth(now.getMonth() - 1);
+    }
+
+    if (this.selectedPeriod === '3m') {
+      threshold.setMonth(now.getMonth() - 3);
+    }
+
+    if (this.selectedPeriod === '6m') {
+      threshold.setMonth(now.getMonth() - 6);
+    }
+
+    if (this.selectedPeriod === '1y') {
+      threshold.setFullYear(now.getFullYear() - 1);
+    }
+
+    return date >= threshold;
+  }
+
   getGmailSearchUrl(source: RegistrationSource): string {
     return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(
       this.getGmailSearchQuery(source),
