@@ -131,6 +131,9 @@ import { RegistrationSource } from '../../../../models/registration-source.model
                 <p class="text-sm text-gray-500">
                   {{ source.domain }}
                 </p>
+                <p class="mt-1 text-sm text-gray-500">
+                  頻度: {{ getFrequencyLabel(source) }}
+                </p>
               </div>
 
               <div class="flex gap-2 text-sm">
@@ -307,9 +310,24 @@ export class SourcesComponent {
       source.senderEmail,
       source.category,
       source.confidence,
+      this.getFrequencyLabel(source),
     ].join(' ').toLowerCase();
 
     return searchableText.includes(query);
+  }
+
+  getFrequencyLabel(source: RegistrationSource): string {
+    const patternLabels = {
+      daily: '毎日',
+      weekly: '週次',
+      monthly: '月次',
+    };
+
+    if (source.frequency.pattern) {
+      return patternLabels[source.frequency.pattern];
+    }
+
+    return `${source.frequency.period}日間で${source.frequency.count}回`;
   }
 
   getGmailSearchUrl(source: RegistrationSource): string {
