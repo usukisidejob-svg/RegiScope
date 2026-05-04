@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { SourceService } from '../../../../core/services/source.service';
+import { RegistrationSource } from '../../../../models/registration-source.model';
 
 @Component({
   selector: 'app-sources',
@@ -121,6 +122,14 @@ import { SourceService } from '../../../../core/services/source.service';
                   {{ source.confidence }}
                 </span>
               </div>
+              <a
+                [href]="getGmailSearchUrl(source)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Gmailで検索
+              </a>
             </div>
 
             @if (source.isUrgent) {
@@ -219,5 +228,9 @@ export class SourcesComponent {
 
       return 0;
     });
+  }
+  getGmailSearchUrl(source: RegistrationSource): string {
+    const query = `from:${source.senderEmail}`;
+    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
   }
 }
