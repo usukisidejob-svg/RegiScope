@@ -38,6 +38,25 @@ import { SourceService } from '../../../../core/services/source.service';
             </button>
           }
         </div>
+        <div class="mt-5">
+          <p class="mb-3 text-sm font-semibold text-gray-700">信頼度</p>
+
+          <div class="flex flex-wrap gap-2">
+            @for (confidence of confidenceLevels; track confidence.value) {
+              <button
+                type="button"
+                class="rounded-full px-4 py-2 text-sm font-medium transition"
+                [class.bg-blue-600]="selectedConfidence === confidence.value"
+                [class.text-white]="selectedConfidence === confidence.value"
+                [class.bg-gray-100]="selectedConfidence !== confidence.value"
+                [class.text-gray-700]="selectedConfidence !== confidence.value"
+                (click)="selectedConfidence = confidence.value"
+              >
+                {{ confidence.label }}
+              </button>
+            }
+          </div>
+        </div>
       </div>
 
       @if (urgentCount > 0) {
@@ -104,11 +123,26 @@ export class SourcesComponent {
     { value: 'other', label: 'その他' },
   ] as const;
 
-  get filteredSources() {
-    if (this.selectedCategory === 'all') {
-      return this.sources;
-    }
+  selectedConfidence: 'all' | 'high' | 'medium' | 'low' = 'all';
 
-    return this.sources.filter((source) => source.category === this.selectedCategory);
+  confidenceLevels = [
+    { value: 'all', label: 'All' },
+    { value: 'high', label: '高' },
+    { value: 'medium', label: '中' },
+    { value: 'low', label: '低' },
+  ] as const;
+
+  get filteredSources() {
+    return this.sources.filter((source) => {
+      if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
+        return false;
+      }
+
+      if (this.selectedConfidence !== 'all' && source.confidence !== this.selectedConfidence) {
+        return false;
+      }
+
+      return true;
+    });
   }
 }
