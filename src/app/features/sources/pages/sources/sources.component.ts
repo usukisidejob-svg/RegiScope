@@ -20,25 +20,47 @@ import { SourceService } from '../../../../core/services/source.service';
           </p>
         </div>
       }
-      <div class="rounded-lg border border-gray-200 bg-white p-5">
-        <p class="mb-3 text-sm font-semibold text-gray-700">カテゴリ</p>
 
-        <div class="flex flex-wrap gap-2">
-          @for (category of categories; track category.value) {
-            <button
-              type="button"
-              class="rounded-full px-4 py-2 text-sm font-medium transition"
-              [class.bg-blue-600]="selectedCategory === category.value"
-              [class.text-white]="selectedCategory === category.value"
-              [class.bg-gray-100]="selectedCategory !== category.value"
-              [class.text-gray-700]="selectedCategory !== category.value"
-              (click)="selectedCategory = category.value"
-            >
-              {{ category.label }}
-            </button>
-          }
+      <div class="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
+        <div>
+          <p class="mb-3 text-sm font-semibold text-gray-700">ソート</p>
+
+          <div class="flex flex-wrap gap-2">
+            @for (option of sortOptions; track option.value) {
+              <button
+                type="button"
+                class="rounded-full px-4 py-2 text-sm font-medium transition"
+                [class.bg-blue-600]="selectedSort === option.value"
+                [class.text-white]="selectedSort === option.value"
+                [class.bg-gray-100]="selectedSort !== option.value"
+                [class.text-gray-700]="selectedSort !== option.value"
+                (click)="selectedSort = option.value"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </div>
         </div>
-        <div class="mt-5">
+        <div>
+          <p class="mb-3 text-sm font-semibold text-gray-700">カテゴリ</p>
+
+          <div class="flex flex-wrap gap-2">
+            @for (category of categories; track category.value) {
+              <button
+                type="button"
+                class="rounded-full px-4 py-2 text-sm font-medium transition"
+                [class.bg-blue-600]="selectedCategory === category.value"
+                [class.text-white]="selectedCategory === category.value"
+                [class.bg-gray-100]="selectedCategory !== category.value"
+                [class.text-gray-700]="selectedCategory !== category.value"
+                (click)="selectedCategory = category.value"
+              >
+                {{ category.label }}
+              </button>
+            }
+          </div>
+        </div>
+        <div>
           <p class="mb-3 text-sm font-semibold text-gray-700">信頼度</p>
 
           <div class="flex flex-wrap gap-2">
@@ -57,7 +79,7 @@ import { SourceService } from '../../../../core/services/source.service';
             }
           </div>
         </div>
-        <div class="mt-5">
+        <div>
           <label
             class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700"
           >
@@ -147,8 +169,26 @@ export class SourcesComponent {
 
   showUrgentOnly = false;
 
+  selectedSort: 'lastSeenDesc' | 'confidenceDesc' | 'urgentFirst' = 'lastSeenDesc';
+
+  sortOptions = [
+    { value: 'lastSeenDesc', label: '新しい順' },
+    { value: 'confidenceDesc', label: '信頼度順' },
+    { value: 'urgentFirst', label: '緊急優先' },
+  ] as const;
+
+  private getConfidenceScore(confidence: 'high' | 'medium' | 'low'): number {
+    const scores = {
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+
+    return scores[confidence];
+  }
+
   get filteredSources() {
-    return this.sources.filter((source) => {
+    const filtered = this.sources.filter((source) => {
       if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
         return false;
       }
@@ -162,6 +202,22 @@ export class SourcesComponent {
       }
 
       return true;
+    });
+
+    return filtered.sort((a, b) => {
+      if (this.selectedSort === 'lastSeenDesc') {
+        return b.lastSeen.getTime() - a.lastSeen.getTime();
+      }
+
+      if (this.selectedSort === 'confidenceDesc') {
+        return this.getConfidenceScore(b.confidence) - this.getConfidenceScore(a.confidence);
+      }
+
+      if (this.selectedSort === 'urgentFirst') {
+        return Number(b.isUrgent) - Number(a.isUrgent);
+      }
+
+      return 0;
     });
   }
 }
