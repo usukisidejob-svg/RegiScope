@@ -230,7 +230,30 @@ export class SourcesComponent {
     });
   }
   getGmailSearchUrl(source: RegistrationSource): string {
-    const query = `from:${source.senderEmail}`;
-    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
+    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(
+      this.getGmailSearchQuery(source),
+    )}`;
+  }
+
+  private getGmailSearchQuery(source: RegistrationSource): string {
+    const baseQuery = `from:${source.senderEmail} newer_than:2y`;
+
+    if (source.isUrgent) {
+      return `${baseQuery} {overdue failed suspended "action required" urgent}`;
+    }
+
+    if (source.category === 'payment') {
+      return `${baseQuery} {invoice receipt payment billing subscription}`;
+    }
+
+    if (source.category === 'account') {
+      return `${baseQuery} {verify verification security login password}`;
+    }
+
+    if (source.category === 'newsletter') {
+      return `${baseQuery} {unsubscribe newsletter}`;
+    }
+
+    return baseQuery;
   }
 }
