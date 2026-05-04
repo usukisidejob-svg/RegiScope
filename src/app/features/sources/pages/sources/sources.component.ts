@@ -20,9 +20,34 @@ import { SourceService } from '../../../../core/services/source.service';
           </p>
         </div>
       }
+      <div class="rounded-lg border border-gray-200 bg-white p-5">
+        <p class="mb-3 text-sm font-semibold text-gray-700">カテゴリ</p>
+
+        <div class="flex flex-wrap gap-2">
+          @for (category of categories; track category.value) {
+            <button
+              type="button"
+              class="rounded-full px-4 py-2 text-sm font-medium transition"
+              [class.bg-blue-600]="selectedCategory === category.value"
+              [class.text-white]="selectedCategory === category.value"
+              [class.bg-gray-100]="selectedCategory !== category.value"
+              [class.text-gray-700]="selectedCategory !== category.value"
+              (click)="selectedCategory = category.value"
+            >
+              {{ category.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (urgentCount > 0) {
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          至急対応: {{ urgentCount }}件
+        </div>
+      }
 
       <div class="space-y-3">
-        @for (source of sources; track source.id) {
+        @for (source of filteredSources; track source.id) {
           <article class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between gap-4">
               <div>
@@ -45,9 +70,7 @@ import { SourceService } from '../../../../core/services/source.service';
             </div>
 
             @if (source.isUrgent) {
-              <p class="mt-3 text-sm font-medium text-red-600">
-                至急対応
-              </p>
+              <p class="mt-3 text-sm font-medium text-red-600">至急対応</p>
             }
           </article>
         } @empty {
@@ -68,4 +91,24 @@ export class SourcesComponent {
   sources = this.currentAccount
     ? this.sourceService.getSourcesByAccountId(this.currentAccount.id)
     : [];
+
+  urgentCount = this.sources.filter((source) => source.isUrgent).length;
+
+  selectedCategory: 'all' | 'newsletter' | 'payment' | 'account' | 'other' = 'all';
+
+  categories = [
+    { value: 'all', label: 'All' },
+    { value: 'newsletter', label: 'メルマガ' },
+    { value: 'payment', label: '支払い' },
+    { value: 'account', label: 'アカウント' },
+    { value: 'other', label: 'その他' },
+  ] as const;
+
+  get filteredSources() {
+    if (this.selectedCategory === 'all') {
+      return this.sources;
+    }
+
+    return this.sources.filter((source) => source.category === this.selectedCategory);
+  }
 }
