@@ -57,6 +57,19 @@ import { SourceService } from '../../../../core/services/source.service';
             }
           </div>
         </div>
+        <div class="mt-5">
+          <label
+            class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700"
+          >
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              [checked]="showUrgentOnly"
+              (change)="showUrgentOnly = !showUrgentOnly"
+            />
+            緊急のみ表示
+          </label>
+        </div>
       </div>
 
       @if (urgentCount > 0) {
@@ -132,6 +145,8 @@ export class SourcesComponent {
     { value: 'low', label: '低' },
   ] as const;
 
+  showUrgentOnly = false;
+
   get filteredSources() {
     return this.sources.filter((source) => {
       if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
@@ -139,6 +154,10 @@ export class SourcesComponent {
       }
 
       if (this.selectedConfidence !== 'all' && source.confidence !== this.selectedConfidence) {
+        return false;
+      }
+
+      if (this.showUrgentOnly && !source.isUrgent) {
         return false;
       }
 
