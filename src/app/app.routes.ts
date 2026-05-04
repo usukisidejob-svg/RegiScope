@@ -12,4 +12,10 @@ export const routes: Routes = [
             import('./features/account/pages/account/account.component')
                 .then((m) => m.AccountComponent),
     },
+    {
+        path: 'sources',
+        loadComponent: () =>
+            import('./features/sources/pages/sources/sources.component')
+                .then((m) => m.SourcesComponent),
+    },
 ];
