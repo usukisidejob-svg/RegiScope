@@ -1,28 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { AccountViewModel } from '../../models/account.model';
-
-// 開発用のモックアカウント
-const MOCK_ACCOUNTS: AccountViewModel[] = [
-    {
-        id: 'account-001',
-        email: 'sample.user@gmail.com',
-        displayName: 'Sample User',
-        isActive: true,
-        hasScanned: false,
-        createdAt: new Date(),
-        status: 'connected',
-    },
-    {
-        id: 'account-002',
-        email: 'work.user@gmail.com',
-        displayName: 'Work User',
-        isActive: true,
-        hasScanned: false,
-        createdAt: new Date(),
-        status: 'connected',
-    },
-];
+import { MOCK_ACCOUNTS } from '../constants/mock-data';
 
 @Injectable({
     providedIn: 'root',
@@ -66,6 +45,28 @@ export class AccountService {
      */
     switchAccount(accountId: string): void {
         this.currentAccountIdSubject.next(accountId);
+    }
+
+    /**
+     * 【action】
+     * Google認証でGmailアカウントを接続する
+     * 開発中は認証後に取得するメールアドレスをモックで作成する
+     */
+    connectGoogleAccount(): void {
+        const accountNumber = this.accountsSubject.value.length + 1;
+        const email = `connected.${accountNumber}@gmail.com`;
+        const newAccount: AccountViewModel = {
+            id: `account-${Date.now()}`,
+            email,
+            displayName: email,
+            isActive: true,
+            hasScanned: false,
+            createdAt: new Date(),
+            status: 'connected',
+        };
+
+        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
+        this.switchAccount(newAccount.id);
     }
 
     /**
