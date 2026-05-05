@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { AccountViewModel } from '../../models/account.model';
-import { MOCK_ACCOUNTS } from '../constants/mock-data';
 
 type ApiAccount = {
     id: string;
@@ -19,13 +18,14 @@ export class AccountService {
     private readonly apiBaseUrl = 'http://localhost:3000';
 
     // アカウント一覧の状態管理【state】
-    private accountsSubject = new BehaviorSubject<AccountViewModel[]>(MOCK_ACCOUNTS);
+    private accountsSubject = new BehaviorSubject<AccountViewModel[]>([]);
 
     // コンポーネントが購読するためのObservable
     accounts$ = this.accountsSubject.asObservable();
 
     // 現在選択中のアカウントIDを管理【state】
-    private currentAccountIdSubject = new BehaviorSubject<string>(MOCK_ACCOUNTS[0].id);
+    private currentAccountIdSubject = new BehaviorSubject<string | null>(null);
+
 
     // 現在選択中のアカウントIDのObservable
     currentAccountId$ = this.currentAccountIdSubject.asObservable();
@@ -45,8 +45,14 @@ export class AccountService {
      */
     getCurrentAccount(): AccountViewModel | undefined {
         const currentId = this.currentAccountIdSubject.value;
+
+        if (!currentId) {
+            return undefined;
+        }
+
         return this.accountsSubject.value.find((account) => account.id === currentId);
     }
+
 
     /**
      * 【action】
@@ -151,6 +157,8 @@ export class AccountService {
 
         if (viewModels.length > 0) {
             this.switchAccount(viewModels[0].id);
+        } else {
+            this.currentAccountIdSubject.next(null);
         }
     }
 
