@@ -3,9 +3,15 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { google } from 'googleapis';
-
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaClient } from './generated/prisma/client.js';
 
 dotenv.config();
+const adapter = new PrismaBetterSqlite3({
+  url: process.env.DATABASE_URL ?? 'file:./dev.db',
+});
+
+const prisma = new PrismaClient({ adapter });
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -79,6 +85,28 @@ app.get('/api/auth/google/callback', async (req, res) => {
     });
 
     const email = profileResponse.data.emailAddress;
+    if (!email) {
+      res.status(500).json({
+        error: 'Gmail email address could not be retrieved.',
+      });
+      return;
+    }
+
+    const account = await prisma.account.upsert({
+      where: {
+        email,
+      },
+      update: {
+        displayName: email,
+      },
+      create: {
+        email,
+        displayName: email,
+      },
+    });
+
+    console.log('saved account:', account);
+
 
     const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
 
