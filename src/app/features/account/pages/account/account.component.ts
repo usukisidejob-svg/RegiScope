@@ -1,14 +1,14 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { combineLatest, map } from 'rxjs';
 import { AccountService } from '../../../../core/services/account.service';
 
 @Component({
-    selector: 'app-account',
-    standalone: true,
-    imports: [AsyncPipe, RouterLink],
-    template: `
+  selector: 'app-account',
+  standalone: true,
+  imports: [AsyncPipe, RouterLink],
+  template: `
     <section class="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 class="text-3xl font-bold text-gray-900">Account</h1>
@@ -133,46 +133,65 @@ import { AccountService } from '../../../../core/services/account.service';
     </section>
   `,
 })
-export class AccountComponent {
-    private accountService = inject(AccountService);
+export class AccountComponent implements OnInit {
+  private accountService = inject(AccountService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
-    accounts$ = this.accountService.accounts$;
-    currentAccountId$ = this.accountService.currentAccountId$;
-    isAddingAccount = false;
 
-    currentAccount$ = combineLatest([
-        this.accountService.accounts$,
-        this.accountService.currentAccountId$,
-    ]).pipe(
-        map(([accounts, currentAccountId]) =>
-            accounts.find((account) => account.id === currentAccountId)
-        )
-    );
+  accounts$ = this.accountService.accounts$;
+  currentAccountId$ = this.accountService.currentAccountId$;
+  isAddingAccount = false;
 
-    switchAccount(accountId: string): void {
-        this.accountService.switchAccount(accountId);
+  currentAccount$ = combineLatest([
+    this.accountService.accounts$,
+    this.accountService.currentAccountId$,
+  ]).pipe(
+    map(([accounts, currentAccountId]) =>
+      accounts.find((account) => account.id === currentAccountId)
+    )
+  );
+
+  switchAccount(accountId: string): void {
+    this.accountService.switchAccount(accountId);
+  }
+
+  showAddAccountForm(): void {
+    this.isAddingAccount = true;
+  }
+
+  cancelAddAccount(): void {
+    this.isAddingAccount = false;
+  }
+
+  connectGoogleAccount(): void {
+    this.accountService.connectGoogleAccount();
+    this.cancelAddAccount();
+  }
+
+  onScan(): void {
+    const account = this.accountService.getCurrentAccount();
+
+    if (!account) {
+      return;
     }
 
-    showAddAccountForm(): void {
-        this.isAddingAccount = true;
+    this.accountService.markAsScanned(account.id);
+  }
+  async ngOnInit(): Promise<void> {
+    const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');
+
+    await this.accountService.loadAccounts();
+
+    if (!connectedEmail) {
+      return;
     }
 
-    cancelAddAccount(): void {
-        this.isAddingAccount = false;
-    }
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {},
+      replaceUrl: true,
+    });
+  }
 
-    connectGoogleAccount(): void {
-        this.accountService.connectGoogleAccount();
-        this.cancelAddAccount();
-    }
-
-    onScan(): void {
-        const account = this.accountService.getCurrentAccount();
-
-        if (!account) {
-            return;
-        }
-
-        this.accountService.markAsScanned(account.id);
-    }
 }

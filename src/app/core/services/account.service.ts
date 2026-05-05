@@ -3,10 +3,20 @@ import { BehaviorSubject } from 'rxjs';
 import { AccountViewModel } from '../../models/account.model';
 import { MOCK_ACCOUNTS } from '../constants/mock-data';
 
+type ApiAccount = {
+    id: string;
+    email: string;
+    displayName: string | null;
+    googleUserId: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
 @Injectable({
     providedIn: 'root',
 })
 export class AccountService {
+    private readonly apiBaseUrl = 'http://localhost:3000';
 
     // アカウント一覧の状態管理【state】
     private accountsSubject = new BehaviorSubject<AccountViewModel[]>(MOCK_ACCOUNTS);
@@ -78,12 +88,12 @@ export class AccountService {
     markAsScanned(accountId: string): void {
         const updatedAccounts = this.accountsSubject.value.map((account) =>
             account.id === accountId
-            ?{
-                ...account,
-                hasScanned: true,
-                lastScanDate: new Date(),
-            }
-            : account
+                ? {
+                    ...account,
+                    hasScanned: true,
+                    lastScanDate: new Date(),
+                }
+                : account
         );
         this.accountsSubject.next(updatedAccounts);
     }
@@ -96,4 +106,56 @@ export class AccountService {
     hasCurrentAccountScanned(): boolean {
         return this.getCurrentAccount()?.hasScanned ?? false;
     }
+    addConnectedAccount(email: string): void {
+        const alreadyExists = this.accountsSubject.value.some((account) => account.email === email);
+
+        if (alreadyExists) {
+            const existingAccount = this.accountsSubject.value.find((account) => account.email === email);
+
+            if (existingAccount) {
+                this.switchAccount(existingAccount.id);
+            }
+
+            return;
+        }
+
+        const newAccount: AccountViewModel = {
+            id: `account-${Date.now()}`,
+            email,
+            displayName: email,
+            isActive: true,
+            hasScanned: false,
+            createdAt: new Date(),
+            status: 'connected',
+        };
+
+        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
+        this.switchAccount(newAccount.id);
+    }
+    async loadAccounts(): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
+
+        if (!response.ok) {
+            throw new Error('Failed to load accounts.');
+        }
+
+        const accounts = (await response.json()) as ApiAccount[];
+
+        const viewModels: AccountViewModel[] = accounts.map((account) => ({
+            id: account.id,
+            email: account.email,
+            displayName: account.displayName ?? account.email,
+            isActive: true,
+            hasScanned: false,
+            createdAt: new Date(account.createdAt),
+            status: 'connected',
+        }));
+
+        this.accountsSubject.next(viewModels);
+
+        if (viewModels.length > 0) {
+            this.switchAccount(viewModels[0].id);
+        }
+    }
+
 }
