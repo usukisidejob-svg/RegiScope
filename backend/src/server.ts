@@ -55,6 +55,40 @@ app.get('/api/auth/google/url', (_req, res) => {
 
     res.json({ authUrl, state });
 });
+app.get('/api/auth/google/callback', async (req, res) => {
+  const code = req.query.code;
+
+  if (typeof code !== 'string') {
+    res.status(400).json({
+      error: 'Authorization code is missing.',
+    });
+    return;
+  }
+
+  try {
+    const { tokens } = await googleOAuthClient.getToken(code);
+    googleOAuthClient.setCredentials(tokens);
+
+    const gmail = google.gmail({
+      version: 'v1',
+      auth: googleOAuthClient,
+    });
+
+    const profileResponse = await gmail.users.getProfile({
+      userId: 'me',
+    });
+
+    const email = profileResponse.data.emailAddress;
+
+    res.redirect(`${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to handle Google OAuth callback.',
+    });
+  }
+});
 
 
 app.listen(port, () => {
