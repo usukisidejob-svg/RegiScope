@@ -65,8 +65,8 @@ export class AccountService {
 
     /**
      * 【action】
-     * Google認証でGmailアカウントを接続する
-     * 開発中は認証後に取得するメールアドレスをモックで作成する
+     * Google認証画面へ遷移する
+     * 認証後のアカウント保存はbackend callbackで行う
      */
     async connectGoogleAccount(): Promise<void> {
         const response = await fetch(`${this.apiBaseUrl}/api/auth/google/url`);
@@ -108,32 +108,7 @@ export class AccountService {
     hasCurrentAccountScanned(): boolean {
         return this.getCurrentAccount()?.hasScanned ?? false;
     }
-    addConnectedAccount(email: string): void {
-        const alreadyExists = this.accountsSubject.value.some((account) => account.email === email);
 
-        if (alreadyExists) {
-            const existingAccount = this.accountsSubject.value.find((account) => account.email === email);
-
-            if (existingAccount) {
-                this.switchAccount(existingAccount.id);
-            }
-
-            return;
-        }
-
-        const newAccount: AccountViewModel = {
-            id: `account-${Date.now()}`,
-            email,
-            displayName: email,
-            isActive: true,
-            hasScanned: false,
-            createdAt: new Date(),
-            status: 'connected',
-        };
-
-        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
-        this.switchAccount(newAccount.id);
-    }
     async loadAccounts(selectedEmail?: string): Promise<void> {
         const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
 
