@@ -61,6 +61,24 @@ app.get('/api/auth/google/url', (_req, res) => {
 
   res.json({ authUrl, state });
 });
+app.get('/api/accounts', async (_req, res) => {
+  try {
+    const accounts = await prisma.account.findMany({
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    res.json(accounts);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to fetch accounts.',
+    });
+  }
+});
+
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
 
