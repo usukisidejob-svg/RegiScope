@@ -134,7 +134,7 @@ export class AccountService {
         this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
         this.switchAccount(newAccount.id);
     }
-    async loadAccounts(): Promise<void> {
+    async loadAccounts(selectedEmail?: string): Promise<void> {
         const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
 
         if (!response.ok) {
@@ -155,11 +155,16 @@ export class AccountService {
 
         this.accountsSubject.next(viewModels);
 
-        if (viewModels.length > 0) {
-            this.switchAccount(viewModels[0].id);
-        } else {
+        if (viewModels.length === 0) {
             this.currentAccountIdSubject.next(null);
+            return;
         }
+
+        const selectedAccount = selectedEmail
+            ? viewModels.find((account) => account.email === selectedEmail)
+            : undefined;
+
+        this.switchAccount(selectedAccount?.id ?? viewModels[0].id);
     }
 
 }
