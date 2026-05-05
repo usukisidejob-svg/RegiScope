@@ -62,22 +62,18 @@ export class AccountService {
      * Google認証でGmailアカウントを接続する
      * 開発中は認証後に取得するメールアドレスをモックで作成する
      */
-    connectGoogleAccount(): void {
-        const accountNumber = this.accountsSubject.value.length + 1;
-        const email = `connected.${accountNumber}@gmail.com`;
-        const newAccount: AccountViewModel = {
-            id: `account-${Date.now()}`,
-            email,
-            displayName: email,
-            isActive: true,
-            hasScanned: false,
-            createdAt: new Date(),
-            status: 'connected',
-        };
+    async connectGoogleAccount(): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/auth/google/url`);
 
-        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
-        this.switchAccount(newAccount.id);
+        if (!response.ok) {
+            throw new Error('Failed to get Google auth URL.');
+        }
+
+        const data = (await response.json()) as { authUrl: string };
+
+        window.location.href = data.authUrl;
     }
+
 
     /**
      * 【action】
