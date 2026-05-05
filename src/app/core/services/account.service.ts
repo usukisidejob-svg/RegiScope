@@ -78,12 +78,12 @@ export class AccountService {
     markAsScanned(accountId: string): void {
         const updatedAccounts = this.accountsSubject.value.map((account) =>
             account.id === accountId
-            ?{
-                ...account,
-                hasScanned: true,
-                lastScanDate: new Date(),
-            }
-            : account
+                ? {
+                    ...account,
+                    hasScanned: true,
+                    lastScanDate: new Date(),
+                }
+                : account
         );
         this.accountsSubject.next(updatedAccounts);
     }
@@ -96,4 +96,31 @@ export class AccountService {
     hasCurrentAccountScanned(): boolean {
         return this.getCurrentAccount()?.hasScanned ?? false;
     }
+    addConnectedAccount(email: string): void {
+        const alreadyExists = this.accountsSubject.value.some((account) => account.email === email);
+
+        if (alreadyExists) {
+            const existingAccount = this.accountsSubject.value.find((account) => account.email === email);
+
+            if (existingAccount) {
+                this.switchAccount(existingAccount.id);
+            }
+
+            return;
+        }
+
+        const newAccount: AccountViewModel = {
+            id: `account-${Date.now()}`,
+            email,
+            displayName: email,
+            isActive: true,
+            hasScanned: false,
+            createdAt: new Date(),
+            status: 'connected',
+        };
+
+        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
+        this.switchAccount(newAccount.id);
+    }
+
 }

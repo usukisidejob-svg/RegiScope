@@ -13,47 +13,47 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:4200';
 
 
 app.use(cors({
-    origin: frontendOrigin,
+  origin: frontendOrigin,
 }));
 
 app.use(express.json());
 
 const googleOAuthClient = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI,
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI,
 );
 
 const gmailScopes = [
-    'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.readonly',
 ];
 
 app.get('/health', (_req, res) => {
-    res.json({ ok: true });
+  res.json({ ok: true });
 });
 
 app.get('/api/auth/google/url', (_req, res) => {
-    if (
-        !process.env.GOOGLE_CLIENT_ID ||
-        !process.env.GOOGLE_CLIENT_SECRET ||
-        !process.env.GOOGLE_REDIRECT_URI
-    ) {
-        res.status(500).json({
-            error: 'Google OAuth environment variables are not configured.',
-        });
-        return;
-    }
-
-    const state = randomUUID();
-
-    const authUrl = googleOAuthClient.generateAuthUrl({
-        access_type: 'offline',
-        prompt: 'consent',
-        scope: gmailScopes,
-        state,
+  if (
+    !process.env.GOOGLE_CLIENT_ID ||
+    !process.env.GOOGLE_CLIENT_SECRET ||
+    !process.env.GOOGLE_REDIRECT_URI
+  ) {
+    res.status(500).json({
+      error: 'Google OAuth environment variables are not configured.',
     });
+    return;
+  }
 
-    res.json({ authUrl, state });
+  const state = randomUUID();
+
+  const authUrl = googleOAuthClient.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: gmailScopes,
+    state,
+  });
+
+  res.json({ authUrl, state });
 });
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
@@ -80,7 +80,10 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
     const email = profileResponse.data.emailAddress;
 
-    res.redirect(`${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`);
+    const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
+
+    res.redirect(redirectUrl);
+
   } catch (error) {
     console.error(error);
 
@@ -92,5 +95,4 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 
 app.listen(port, () => {
-    console.log(`API server running on http://localhost:${port}`);
 });
