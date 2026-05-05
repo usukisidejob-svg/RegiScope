@@ -178,13 +178,14 @@ export class AccountComponent implements OnInit {
 
     this.accountService.markAsScanned(account.id);
   }
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');
+
+    await this.accountService.loadAccounts();
+
     if (!connectedEmail) {
       return;
     }
-
-    this.accountService.addConnectedAccount(connectedEmail);
 
     this.router.navigate([], {
       relativeTo: this.route,
