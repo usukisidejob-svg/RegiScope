@@ -20,4 +20,24 @@ model Account {
   updatedAt    DateTime @updatedAt
   hasScanned   Boolean   @default(false)
   lastScanDate DateTime?
+
+  sources      RegistrationSource[]
+}
+model RegistrationSource {
+  id          String   @id @default(cuid())
+  accountId   String
+  name        String
+  domain      String
+  category    String
+  confidence  String
+  frequency   String?
+  lastEmailAt DateTime?
+  isUrgent    Boolean  @default(false)
+  gmailQuery  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
 }

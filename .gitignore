@@ -45,7 +45,8 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 backend/dist/server.js
-/backend/prisma/dev.db
-/backend/prisma/dev.db-journal
-/backend/prisma/dev.db-wal
-/backend/prisma/dev.db-shm
+/backend/dev.db
+/backend/dev.db-journal
+/backend/dev.db-wal
+/backend/dev.db-shm
+
