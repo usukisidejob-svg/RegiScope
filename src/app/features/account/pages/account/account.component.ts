@@ -169,14 +169,14 @@ export class AccountComponent implements OnInit {
     this.cancelAddAccount();
   }
 
-  onScan(): void {
+  async onScan(): Promise<void> {
     const account = this.accountService.getCurrentAccount();
 
     if (!account) {
       return;
     }
 
-    this.accountService.markAsScanned(account.id);
+    await this.accountService.markAsScanned(account.id);
   }
   async ngOnInit(): Promise<void> {
     const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');

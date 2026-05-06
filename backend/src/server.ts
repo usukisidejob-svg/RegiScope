@@ -78,6 +78,30 @@ app.get('/api/accounts', async (_req, res) => {
     });
   }
 });
+app.patch('/api/accounts/:accountId/scan', async (req, res) => {
+  const { accountId } = req.params;
+
+  try {
+    const account = await prisma.account.update({
+      where: {
+        id: accountId,
+      },
+      data: {
+        hasScanned: true,
+        lastScanDate: new Date(),
+      },
+    });
+
+    res.json(account);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to update account scan status.',
+    });
+  }
+});
+
 
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;

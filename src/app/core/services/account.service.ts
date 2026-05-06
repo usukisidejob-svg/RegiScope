@@ -89,18 +89,32 @@ export class AccountService {
      * スキャン処理完了後に呼び出す
      * → hasScanned = true によってSource画面が有効化される
      */
-    markAsScanned(accountId: string): void {
+    async markAsScanned(accountId: string): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/accounts/${accountId}/scan`, {
+            method: 'PATCH',
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update account scan status.');
+        }
+
+        const updatedAccount = (await response.json()) as ApiAccount;
+
         const updatedAccounts = this.accountsSubject.value.map((account) =>
-            account.id === accountId
+            account.id === updatedAccount.id
                 ? {
                     ...account,
-                    hasScanned: true,
-                    lastScanDate: new Date(),
+                    hasScanned: updatedAccount.hasScanned,
+                    lastScanDate: updatedAccount.lastScanDate
+                        ? new Date(updatedAccount.lastScanDate)
+                        : undefined,
                 }
                 : account
         );
+
         this.accountsSubject.next(updatedAccounts);
     }
+
 
     /**
      * 【getter】
