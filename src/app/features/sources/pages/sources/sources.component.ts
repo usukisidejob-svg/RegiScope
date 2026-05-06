@@ -235,7 +235,7 @@ export class SourcesComponent implements OnInit {
     }
 
     await this.sourceService.loadSources(this.currentAccount.id);
-    this.sourcesSnapshot = this.sourceService.getSourcesByAccountId(this.currentAccount.id);
+    this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
   }
 
   get filteredSources() {

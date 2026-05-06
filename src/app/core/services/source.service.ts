@@ -26,8 +26,8 @@ export class SourceService {
   sources$ = this.sourcesSubject.asObservable();
   searchQuery = signal('');
 
-  getSourcesByAccountId(accountId: string): RegistrationSource[] {
-    return this.sourcesSubject.value.filter((source) => source.accountId === accountId);
+  getSourcesSnapshot(): RegistrationSource[] {
+    return this.sourcesSubject.value;
   }
 
   setSearchQuery(query: string): void {
