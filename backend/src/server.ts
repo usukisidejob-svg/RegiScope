@@ -38,6 +38,37 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+const mockRegistrationSources = [
+  {
+    name: 'Netflix',
+    domain: 'netflix.com',
+    category: 'subscription',
+    confidence: 'high',
+    frequency: 'monthly',
+    isUrgent: true,
+    gmailQuery: 'from:netflix.com OR netflix',
+  },
+  {
+    name: 'GitHub',
+    domain: 'github.com',
+    category: 'account',
+    confidence: 'high',
+    frequency: 'daily',
+    isUrgent: false,
+    gmailQuery: 'from:github.com OR github',
+  },
+  {
+    name: '楽天市場',
+    domain: 'rakuten.co.jp',
+    category: 'payment',
+    confidence: 'high',
+    frequency: 'monthly',
+    isUrgent: false,
+    gmailQuery: 'from:rakuten.co.jp OR 楽天市場',
+  },
+];
+
+
 app.get('/api/auth/google/url', (_req, res) => {
   if (
     !process.env.GOOGLE_CLIENT_ID ||
@@ -90,6 +121,19 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
         hasScanned: true,
         lastScanDate: new Date(),
       },
+    });
+    await prisma.registrationSource.deleteMany({
+      where: {
+        accountId,
+      },
+    });
+
+    await prisma.registrationSource.createMany({
+      data: mockRegistrationSources.map((source) => ({
+        accountId,
+        ...source,
+        lastEmailAt: new Date(),
+      })),
     });
 
     res.json(account);
