@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { google } from 'googleapis';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from './generated/prisma/client.js';
+import { detectRegistrationSources } from './services/scan.service.js';
 
 dotenv.config();
 const adapter = new PrismaBetterSqlite3({
@@ -37,37 +38,6 @@ const gmailScopes = [
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
-
-const mockRegistrationSources = [
-  {
-    name: 'Netflix',
-    domain: 'netflix.com',
-    category: 'subscription',
-    confidence: 'high',
-    frequency: 'monthly',
-    isUrgent: true,
-    gmailQuery: 'from:netflix.com OR netflix',
-  },
-  {
-    name: 'GitHub',
-    domain: 'github.com',
-    category: 'account',
-    confidence: 'high',
-    frequency: 'daily',
-    isUrgent: false,
-    gmailQuery: 'from:github.com OR github',
-  },
-  {
-    name: '楽天市場',
-    domain: 'rakuten.co.jp',
-    category: 'payment',
-    confidence: 'high',
-    frequency: 'monthly',
-    isUrgent: false,
-    gmailQuery: 'from:rakuten.co.jp OR 楽天市場',
-  },
-];
-
 
 app.get('/api/auth/google/url', (_req, res) => {
   if (
@@ -122,6 +92,8 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
         lastScanDate: new Date(),
       },
     });
+    const detectedSources = await detectRegistrationSources();
+
     await prisma.registrationSource.deleteMany({
       where: {
         accountId,
@@ -129,7 +101,7 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
     });
 
     await prisma.registrationSource.createMany({
-      data: mockRegistrationSources.map((source) => ({
+      data: detectedSources.map((source) => ({
         accountId,
         ...source,
         lastEmailAt: new Date(),
