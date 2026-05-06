@@ -22,7 +22,23 @@ model Account {
   lastScanDate DateTime?
 
   sources      RegistrationSource[]
+  oauthToken   GoogleOAuthToken?
 }
+
+model GoogleOAuthToken {
+  id           String   @id @default(cuid())
+  accountId    String   @unique
+  accessToken  String?
+  refreshToken String?
+  scope        String?
+  tokenType    String?
+  expiryDate   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
 model RegistrationSource {
   id          String   @id @default(cuid())
   accountId   String

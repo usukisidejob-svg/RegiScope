@@ -186,8 +186,26 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
-    console.log('saved account:', account);
-
+    await prisma.googleOAuthToken.upsert({
+      where: {
+        accountId: account.id,
+      },
+      update: {
+        accessToken: tokens.access_token ?? undefined,
+        refreshToken: tokens.refresh_token ?? undefined,
+        scope: tokens.scope ?? undefined,
+        tokenType: tokens.token_type ?? undefined,
+        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+      },
+      create: {
+        accountId: account.id,
+        accessToken: tokens.access_token ?? null,
+        refreshToken: tokens.refresh_token ?? null,
+        scope: tokens.scope ?? null,
+        tokenType: tokens.token_type ?? null,
+        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      },
+    });
 
     const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
 
