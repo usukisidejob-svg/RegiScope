@@ -83,6 +83,41 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   const { accountId } = req.params;
 
   try {
+    const accountWithToken = await prisma.account.findUnique({
+      where: {
+        id: accountId,
+      },
+      include: {
+        oauthToken: true,
+      },
+    });
+
+    if (!accountWithToken?.oauthToken) {
+      res.status(400).json({
+        error: 'Google OAuth token is not connected for this account.',
+      });
+      return;
+    }
+
+    const accountOAuthClient = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    accountOAuthClient.setCredentials({
+      access_token: accountWithToken.oauthToken.accessToken ?? undefined,
+      refresh_token: accountWithToken.oauthToken.refreshToken ?? undefined,
+      scope: accountWithToken.oauthToken.scope ?? undefined,
+      token_type: accountWithToken.oauthToken.tokenType ?? undefined,
+      expiry_date: accountWithToken.oauthToken.expiryDate?.getTime(),
+    });
+
+    const gmail = google.gmail({
+      version: 'v1',
+      auth: accountOAuthClient,
+    });
+
     const account = await prisma.account.update({
       where: {
         id: accountId,
@@ -92,7 +127,7 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
         lastScanDate: new Date(),
       },
     });
-    const detectedSources = await detectRegistrationSources();
+    const detectedSources = await detectRegistrationSources({ gmail });
 
     await prisma.registrationSource.deleteMany({
       where: {

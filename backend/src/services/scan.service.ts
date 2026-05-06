@@ -1,3 +1,5 @@
+import type { gmail_v1 } from 'googleapis';
+
 export type DetectedRegistrationSource = {
   name: string;
   domain: string;
@@ -8,7 +10,19 @@ export type DetectedRegistrationSource = {
   gmailQuery: string | null;
 };
 
-export async function detectRegistrationSources(): Promise<DetectedRegistrationSource[]> {
+type DetectRegistrationSourcesOptions = {
+  gmail: gmail_v1.Gmail;
+};
+
+export async function detectRegistrationSources({
+  gmail,
+}: DetectRegistrationSourcesOptions): Promise<DetectedRegistrationSource[]> {
+  await gmail.users.messages.list({
+    userId: 'me',
+    maxResults: 10,
+    q: 'newer_than:1y',
+  });
+
   return [
     {
       name: 'Netflix',
