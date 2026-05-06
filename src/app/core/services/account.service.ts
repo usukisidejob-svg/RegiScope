@@ -7,6 +7,8 @@ type ApiAccount = {
     email: string;
     displayName: string | null;
     googleUserId: string | null;
+    hasScanned: boolean;
+    lastScanDate: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -123,7 +125,8 @@ export class AccountService {
             email: account.email,
             displayName: account.displayName ?? account.email,
             isActive: true,
-            hasScanned: false,
+            hasScanned: account.hasScanned,
+            lastScanDate: account.lastScanDate ? new Date(account.lastScanDate) : undefined,
             createdAt: new Date(account.createdAt),
             status: 'connected',
         }));
