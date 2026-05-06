@@ -102,6 +102,29 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   }
 });
 
+app.get('/api/accounts/:accountId/sources', async (req, res) => {
+  const { accountId } = req.params;
+
+  try {
+    const sources = await prisma.registrationSource.findMany({
+      where: {
+        accountId,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    res.json(sources);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to fetch registration sources.',
+    });
+  }
+});
+
 
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
