@@ -164,24 +164,24 @@ export class AccountComponent implements OnInit {
     this.isAddingAccount = false;
   }
 
-  connectGoogleAccount(): void {
-    this.accountService.connectGoogleAccount();
+  async connectGoogleAccount(): Promise<void> {
+    await this.accountService.connectGoogleAccount();
     this.cancelAddAccount();
   }
 
-  onScan(): void {
+  async onScan(): Promise<void> {
     const account = this.accountService.getCurrentAccount();
 
     if (!account) {
       return;
     }
 
-    this.accountService.markAsScanned(account.id);
+    await this.accountService.markAsScanned(account.id);
   }
   async ngOnInit(): Promise<void> {
     const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');
 
-    await this.accountService.loadAccounts();
+    await this.accountService.loadAccounts(connectedEmail ?? undefined);
 
     if (!connectedEmail) {
       return;

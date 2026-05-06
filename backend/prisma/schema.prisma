@@ -18,4 +18,6 @@ model Account {
   googleUserId String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  hasScanned   Boolean   @default(false)
+  lastScanDate DateTime?
 }

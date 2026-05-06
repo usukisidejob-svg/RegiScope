@@ -1,13 +1,14 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { AccountViewModel } from '../../models/account.model';
-import { MOCK_ACCOUNTS } from '../constants/mock-data';
 
 type ApiAccount = {
     id: string;
     email: string;
     displayName: string | null;
     googleUserId: string | null;
+    hasScanned: boolean;
+    lastScanDate: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -19,13 +20,14 @@ export class AccountService {
     private readonly apiBaseUrl = 'http://localhost:3000';
 
     // アカウント一覧の状態管理【state】
-    private accountsSubject = new BehaviorSubject<AccountViewModel[]>(MOCK_ACCOUNTS);
+    private accountsSubject = new BehaviorSubject<AccountViewModel[]>([]);
 
     // コンポーネントが購読するためのObservable
     accounts$ = this.accountsSubject.asObservable();
 
     // 現在選択中のアカウントIDを管理【state】
-    private currentAccountIdSubject = new BehaviorSubject<string>(MOCK_ACCOUNTS[0].id);
+    private currentAccountIdSubject = new BehaviorSubject<string | null>(null);
+
 
     // 現在選択中のアカウントIDのObservable
     currentAccountId$ = this.currentAccountIdSubject.asObservable();
@@ -45,8 +47,14 @@ export class AccountService {
      */
     getCurrentAccount(): AccountViewModel | undefined {
         const currentId = this.currentAccountIdSubject.value;
+
+        if (!currentId) {
+            return undefined;
+        }
+
         return this.accountsSubject.value.find((account) => account.id === currentId);
     }
+
 
     /**
      * 【action】
@@ -59,25 +67,21 @@ export class AccountService {
 
     /**
      * 【action】
-     * Google認証でGmailアカウントを接続する
-     * 開発中は認証後に取得するメールアドレスをモックで作成する
+     * Google認証画面へ遷移する
+     * 認証後のアカウント保存はbackend callbackで行う
      */
-    connectGoogleAccount(): void {
-        const accountNumber = this.accountsSubject.value.length + 1;
-        const email = `connected.${accountNumber}@gmail.com`;
-        const newAccount: AccountViewModel = {
-            id: `account-${Date.now()}`,
-            email,
-            displayName: email,
-            isActive: true,
-            hasScanned: false,
-            createdAt: new Date(),
-            status: 'connected',
-        };
+    async connectGoogleAccount(): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/auth/google/url`);
 
-        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
-        this.switchAccount(newAccount.id);
+        if (!response.ok) {
+            throw new Error('Failed to get Google auth URL.');
+        }
+
+        const data = (await response.json()) as { authUrl: string };
+
+        window.location.href = data.authUrl;
     }
+
 
     /**
      * 【action】
@@ -85,18 +89,32 @@ export class AccountService {
      * スキャン処理完了後に呼び出す
      * → hasScanned = true によってSource画面が有効化される
      */
-    markAsScanned(accountId: string): void {
+    async markAsScanned(accountId: string): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/accounts/${accountId}/scan`, {
+            method: 'PATCH',
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update account scan status.');
+        }
+
+        const updatedAccount = (await response.json()) as ApiAccount;
+
         const updatedAccounts = this.accountsSubject.value.map((account) =>
-            account.id === accountId
+            account.id === updatedAccount.id
                 ? {
                     ...account,
-                    hasScanned: true,
-                    lastScanDate: new Date(),
+                    hasScanned: updatedAccount.hasScanned,
+                    lastScanDate: updatedAccount.lastScanDate
+                        ? new Date(updatedAccount.lastScanDate)
+                        : undefined,
                 }
                 : account
         );
+
         this.accountsSubject.next(updatedAccounts);
     }
+
 
     /**
      * 【getter】
@@ -106,33 +124,8 @@ export class AccountService {
     hasCurrentAccountScanned(): boolean {
         return this.getCurrentAccount()?.hasScanned ?? false;
     }
-    addConnectedAccount(email: string): void {
-        const alreadyExists = this.accountsSubject.value.some((account) => account.email === email);
 
-        if (alreadyExists) {
-            const existingAccount = this.accountsSubject.value.find((account) => account.email === email);
-
-            if (existingAccount) {
-                this.switchAccount(existingAccount.id);
-            }
-
-            return;
-        }
-
-        const newAccount: AccountViewModel = {
-            id: `account-${Date.now()}`,
-            email,
-            displayName: email,
-            isActive: true,
-            hasScanned: false,
-            createdAt: new Date(),
-            status: 'connected',
-        };
-
-        this.accountsSubject.next([...this.accountsSubject.value, newAccount]);
-        this.switchAccount(newAccount.id);
-    }
-    async loadAccounts(): Promise<void> {
+    async loadAccounts(selectedEmail?: string): Promise<void> {
         const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
 
         if (!response.ok) {
@@ -146,16 +139,24 @@ export class AccountService {
             email: account.email,
             displayName: account.displayName ?? account.email,
             isActive: true,
-            hasScanned: false,
+            hasScanned: account.hasScanned,
+            lastScanDate: account.lastScanDate ? new Date(account.lastScanDate) : undefined,
             createdAt: new Date(account.createdAt),
             status: 'connected',
         }));
 
         this.accountsSubject.next(viewModels);
 
-        if (viewModels.length > 0) {
-            this.switchAccount(viewModels[0].id);
+        if (viewModels.length === 0) {
+            this.currentAccountIdSubject.next(null);
+            return;
         }
+
+        const selectedAccount = selectedEmail
+            ? viewModels.find((account) => account.email === selectedEmail)
+            : undefined;
+
+        this.switchAccount(selectedAccount?.id ?? viewModels[0].id);
     }
 
 }
