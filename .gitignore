@@ -50,3 +50,4 @@ backend/dist/server.js
 /backend/dev.db-wal
 /backend/dev.db-shm
 
+backend/dev.db
