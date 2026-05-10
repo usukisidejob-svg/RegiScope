@@ -1,5 +1,5 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { combineLatest, map } from 'rxjs';
 import { AccountService } from '../../../../core/services/account.service';
@@ -28,6 +28,18 @@ import { AccountService } from '../../../../core/services/account.service';
           }
         </div>
 
+        @if (isLoadingAccounts) {
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-600">
+            アカウントを読み込んでいます。
+          </div>
+        }
+
+        @if (accountLoadError) {
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+            {{ accountLoadError }}
+          </div>
+        }
+
         @if (accounts$ | async; as accounts) {
           <div class="space-y-3">
             @for (account of accounts; track account.id) {
@@ -37,6 +49,8 @@ import { AccountService } from '../../../../core/services/account.service';
                 [class.border-blue-500]="account.id === (currentAccountId$ | async)"
                 [class.bg-blue-50]="account.id === (currentAccountId$ | async)"
                 [class.border-gray-200]="account.id !== (currentAccountId$ | async)"
+                [disabled]="isScanning"
+                [class.opacity-60]="isScanning"
                 (click)="switchAccount(account.id)"
               >
                 <div class="flex items-center justify-between gap-4">
@@ -102,6 +116,12 @@ import { AccountService } from '../../../../core/services/account.service';
                 ＋ 別のGmailアカウントを追加
               </button>
             }
+
+            @if (accounts.length === 0 && !isLoadingAccounts && !accountLoadError) {
+              <div class="rounded-lg border border-dashed border-gray-300 p-4 text-gray-500">
+                接続済みのGmailアカウントはまだありません。
+              </div>
+            }
           </div>
         }
       </div>
@@ -112,12 +132,21 @@ import { AccountService } from '../../../../core/services/account.service';
             Gmailの受信トレイをスキャンして、登録先候補（メルマガ、支払い、アカウント等）を抽出します。
           </p>
 
+          @if (scanError) {
+            <div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+              {{ scanError }}
+            </div>
+          }
+
           <button
             type="button"
             class="mt-8 w-full rounded-xl bg-blue-600 px-4 py-5 text-xl font-bold text-white transition hover:bg-blue-700"
+            [disabled]="isScanning"
+            [class.cursor-not-allowed]="isScanning"
+            [class.opacity-70]="isScanning"
             (click)="onScan()"
           >
-            ↻ {{ currentAccount.hasScanned ? '再スキャン' : 'スキャン開始' }}
+            ↻ {{ isScanning ? 'スキャン中...' : currentAccount.hasScanned ? '再スキャン' : 'スキャン開始' }}
           </button>
 
           @if (currentAccount.hasScanned) {
@@ -142,6 +171,10 @@ export class AccountComponent implements OnInit {
   accounts$ = this.accountService.accounts$;
   currentAccountId$ = this.accountService.currentAccountId$;
   isAddingAccount = false;
+  isLoadingAccounts = false;
+  accountLoadError = '';
+  isScanning = false;
+  scanError = '';
 
   currentAccount$ = combineLatest([
     this.accountService.accounts$,
@@ -165,23 +198,49 @@ export class AccountComponent implements OnInit {
   }
 
   async connectGoogleAccount(): Promise<void> {
-    await this.accountService.connectGoogleAccount();
-    this.cancelAddAccount();
+    try {
+      await this.accountService.connectGoogleAccount();
+      this.cancelAddAccount();
+    } catch {
+      this.accountLoadError = 'Google認証URLの取得に失敗しました。時間をおいて再度お試しください。';
+    }
   }
 
   async onScan(): Promise<void> {
+    if (this.isScanning) {
+      return;
+    }
+
     const account = this.accountService.getCurrentAccount();
 
     if (!account) {
       return;
     }
 
-    await this.accountService.markAsScanned(account.id);
+    this.isScanning = true;
+    this.scanError = '';
+
+    try {
+      await this.accountService.markAsScanned(account.id);
+    } catch {
+      this.scanError = 'スキャンに失敗しました。Google認証の有効期限が切れている場合は、再認証してください。';
+    } finally {
+      this.isScanning = false;
+    }
   }
   async ngOnInit(): Promise<void> {
     const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');
 
-    await this.accountService.loadAccounts(connectedEmail ?? undefined);
+    this.isLoadingAccounts = true;
+    this.accountLoadError = '';
+
+    try {
+      await this.accountService.loadAccounts(connectedEmail ?? undefined);
+    } catch {
+      this.accountLoadError = 'アカウント一覧の読み込みに失敗しました。backendが起動しているか確認してください。';
+    } finally {
+      this.isLoadingAccounts = false;
+    }
 
     if (!connectedEmail) {
       return;

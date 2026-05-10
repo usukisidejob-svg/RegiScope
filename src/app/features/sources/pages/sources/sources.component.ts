@@ -1,4 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AccountService } from '../../../../core/services/account.service';
 import { SourceService } from '../../../../core/services/source.service';
 import { RegistrationSource } from '../../../../models/registration-source.model';
@@ -6,6 +7,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
 @Component({
   selector: 'app-sources',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <section class="mx-auto max-w-5xl space-y-6">
       <div>
@@ -22,6 +24,37 @@ import { RegistrationSource } from '../../../../models/registration-source.model
         </div>
       }
 
+      @if (isLoadingSources) {
+        <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
+          登録先候補を読み込んでいます。
+        </div>
+      }
+
+      @if (sourceLoadError) {
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          {{ sourceLoadError }}
+        </div>
+      }
+
+      @if (!isLoadingSources && !sourceLoadError && !currentAccount) {
+        <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
+          スキャン対象のGmailアカウントが選択されていません。
+          <a routerLink="/account" class="font-semibold text-blue-700 hover:underline">
+            Account画面でアカウントを選択してください。
+          </a>
+        </div>
+      }
+
+      @if (!isLoadingSources && !sourceLoadError && currentAccount && !currentAccount.hasScanned) {
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800">
+          このGmailアカウントはまだスキャンされていません。
+          <a routerLink="/account" class="font-semibold text-amber-900 underline">
+            Account画面でスキャンを開始してください。
+          </a>
+        </div>
+      }
+
+      @if (!isLoadingSources && !sourceLoadError && currentAccount?.hasScanned) {
       <div class="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
         <div>
           <p class="mb-3 text-sm font-semibold text-gray-700">ソート</p>
@@ -164,6 +197,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </div>
         }
       </div>
+      }
     </section>
   `,
 })
@@ -173,6 +207,8 @@ export class SourcesComponent implements OnInit {
 
   currentAccount = this.accountService.getCurrentAccount();
   sourcesSnapshot: RegistrationSource[] = [];
+  isLoadingSources = false;
+  sourceLoadError = '';
 
   get urgentCount(): number {
     return this.sourcesSnapshot.filter((source) => source.isUrgent).length;
@@ -228,14 +264,25 @@ export class SourcesComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    this.currentAccount = this.accountService.getCurrentAccount();
+    this.isLoadingSources = true;
+    this.sourceLoadError = '';
 
-    if (!this.currentAccount) {
-      return;
+    try {
+      await this.accountService.loadAccounts();
+      this.currentAccount = this.accountService.getCurrentAccount();
+
+      if (!this.currentAccount || !this.currentAccount.hasScanned) {
+        this.sourcesSnapshot = [];
+        return;
+      }
+
+      await this.sourceService.loadSources(this.currentAccount.id);
+      this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
+    } catch {
+      this.sourceLoadError = '登録先候補の読み込みに失敗しました。backendが起動しているか確認してください。';
+    } finally {
+      this.isLoadingSources = false;
     }
-
-    await this.sourceService.loadSources(this.currentAccount.id);
-    this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
   }
 
   get filteredSources() {
