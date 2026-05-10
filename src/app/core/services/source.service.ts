@@ -52,6 +52,7 @@ export class SourceService {
       displayName: source.name,
       domain: source.domain,
       senderEmail: source.senderEmail ?? `no-reply@${source.domain}`,
+      gmailQuery: source.gmailQuery ?? undefined,
       category: this.toSourceCategory(source.category),
       confidence: this.toConfidenceLevel(source.confidence),
       isUrgent: source.isUrgent,

@@ -347,6 +347,10 @@ export class SourcesComponent implements OnInit {
   }
 
   private getGmailSearchQuery(source: RegistrationSource): string {
+    if (source.gmailQuery) {
+      return source.gmailQuery;
+    }
+
     const baseQuery = `from:${source.senderEmail} newer_than:2y`;
 
     if (source.isUrgent) {
