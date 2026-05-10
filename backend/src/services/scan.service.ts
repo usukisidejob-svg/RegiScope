@@ -26,36 +26,73 @@ type GmailMessageCandidate = {
   date: Date | null;
 };
 
+const MAX_MESSAGES_TO_SCAN = 200;
+const MESSAGE_DETAIL_BATCH_SIZE = 5;
+
 export async function detectRegistrationSources({
   gmail,
 }: DetectRegistrationSourcesOptions): Promise<DetectedRegistrationSource[]> {
-  const messageList = await gmail.users.messages.list({
-    userId: 'me',
-    maxResults: 50,
-    q: 'newer_than:1y',
-  });
-
-  const messages = messageList.data.messages ?? [];
-  const candidates = await Promise.all(
-    messages.map(async (message) => {
-      if (!message.id) {
-        return null;
-      }
-
-      const detail = await gmail.users.messages.get({
-        userId: 'me',
-        id: message.id,
-        format: 'metadata',
-        metadataHeaders: ['From', 'Subject', 'Date'],
-      });
-
-      return toGmailMessageCandidate(detail.data);
-    }),
-  );
+  const messages = await listRecentMessages(gmail);
+  const candidates = await fetchMessageCandidates(gmail, messages);
 
   return buildRegistrationSources(
     candidates.filter((candidate): candidate is GmailMessageCandidate => candidate !== null),
   );
+}
+
+async function listRecentMessages(gmail: gmail_v1.Gmail): Promise<gmail_v1.Schema$Message[]> {
+  const messages: gmail_v1.Schema$Message[] = [];
+  let pageToken: string | undefined;
+
+  while (messages.length < MAX_MESSAGES_TO_SCAN) {
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: Math.min(50, MAX_MESSAGES_TO_SCAN - messages.length),
+      pageToken,
+      q: 'newer_than:1y',
+    });
+
+    messages.push(...(response.data.messages ?? []));
+
+    pageToken = response.data.nextPageToken ?? undefined;
+
+    if (!pageToken) {
+      break;
+    }
+  }
+
+  return messages;
+}
+
+async function fetchMessageCandidates(
+  gmail: gmail_v1.Gmail,
+  messages: gmail_v1.Schema$Message[],
+): Promise<Array<GmailMessageCandidate | null>> {
+  const candidates: Array<GmailMessageCandidate | null> = [];
+
+  for (let index = 0; index < messages.length; index += MESSAGE_DETAIL_BATCH_SIZE) {
+    const batch = messages.slice(index, index + MESSAGE_DETAIL_BATCH_SIZE);
+    const batchCandidates = await Promise.all(
+      batch.map(async (message) => {
+        if (!message.id) {
+          return null;
+        }
+
+        const detail = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id,
+          format: 'metadata',
+          metadataHeaders: ['From', 'Subject', 'Date'],
+        });
+
+        return toGmailMessageCandidate(detail.data);
+      }),
+    );
+
+    candidates.push(...batchCandidates);
+  }
+
+  return candidates;
 }
 
 function toGmailMessageCandidate(message: gmail_v1.Schema$Message): GmailMessageCandidate | null {
