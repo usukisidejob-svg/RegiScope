@@ -143,7 +143,6 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
       data: detectedSources.map((source) => ({
         accountId,
         ...source,
-        lastEmailAt: new Date(),
       })),
     });
 

@@ -48,6 +48,8 @@ model RegistrationSource {
   category    String
   confidence  String
   frequency   String?
+  emailCount  Int      @default(0)
+  firstEmailAt DateTime?
   lastEmailAt DateTime?
   isUrgent    Boolean  @default(false)
   gmailQuery  String?

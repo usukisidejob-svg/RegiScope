@@ -11,6 +11,8 @@ type ApiRegistrationSource = {
   category: string;
   confidence: string;
   frequency: string | null;
+  emailCount: number;
+  firstEmailAt: string | null;
   lastEmailAt: string | null;
   isUrgent: boolean;
   gmailQuery: string | null;
@@ -56,9 +58,9 @@ export class SourceService {
       category: this.toSourceCategory(source.category),
       confidence: this.toConfidenceLevel(source.confidence),
       isUrgent: source.isUrgent,
-      firstSeen: source.createdAt ? new Date(source.createdAt) : new Date(),
+      firstSeen: source.firstEmailAt ? new Date(source.firstEmailAt) : new Date(source.createdAt),
       lastSeen: source.lastEmailAt ? new Date(source.lastEmailAt) : new Date(source.createdAt),
-      frequency: this.toEmailFrequency(source.frequency),
+      frequency: this.toEmailFrequency(source.frequency, source.emailCount),
       isPinned: false,
       createdAt: new Date(source.createdAt),
       updatedAt: new Date(source.updatedAt),
@@ -87,18 +89,18 @@ export class SourceService {
     return 'medium';
   }
 
-  private toEmailFrequency(frequency: string | null): RegistrationSource['frequency'] {
+  private toEmailFrequency(frequency: string | null, emailCount: number): RegistrationSource['frequency'] {
     if (frequency === 'daily' || frequency === 'weekly' || frequency === 'monthly') {
       return {
-        count: 1,
+        count: emailCount,
         period: frequency === 'daily' ? 1 : frequency === 'weekly' ? 7 : 30,
         pattern: frequency,
       };
     }
 
     return {
-      count: 0,
-      period: 0,
+      count: emailCount,
+      period: 365,
     };
   }
 

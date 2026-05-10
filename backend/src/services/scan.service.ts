@@ -7,6 +7,9 @@ export type DetectedRegistrationSource = {
   category: string;
   confidence: string;
   frequency: string | null;
+  emailCount: number;
+  firstEmailAt: Date | null;
+  lastEmailAt: Date | null;
   isUrgent: boolean;
   gmailQuery: string | null;
 };
@@ -126,6 +129,10 @@ function buildRegistrationSources(candidates: GmailMessageCandidate[]): Detected
       })[0];
       const category = detectCategory(messages);
       const sender = newestMessage.senderEmail;
+      const datedMessages = messages.filter((message) => message.date !== null);
+      const oldestMessage = [...datedMessages].sort((a, b) => {
+        return (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0);
+      })[0];
 
       return {
         name: normalizeDisplayName(newestMessage.senderName, domain),
@@ -134,6 +141,9 @@ function buildRegistrationSources(candidates: GmailMessageCandidate[]): Detected
         category,
         confidence: detectConfidence(messages, category),
         frequency: detectFrequency(messages),
+        emailCount: messages.length,
+        firstEmailAt: oldestMessage?.date ?? null,
+        lastEmailAt: newestMessage.date,
         isUrgent: messages.some((message) => isUrgentSubject(message.subject)),
         gmailQuery: `from:${sender}`,
       };
