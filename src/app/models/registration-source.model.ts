@@ -13,6 +13,7 @@ export interface RegistrationSource {
     displayName: string;
     domain: string;
     senderEmail: string;
+    gmailQuery?: string;
     category: SourceCategory;
     confidence: ConfidenceLevel;
     isUrgent: boolean;

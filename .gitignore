@@ -45,3 +45,9 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 backend/dist/server.js
+/backend/dev.db
+/backend/dev.db-journal
+/backend/dev.db-wal
+/backend/dev.db-shm
+
+backend/dev.db

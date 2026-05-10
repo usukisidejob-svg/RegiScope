@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { google } from 'googleapis';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from './generated/prisma/client.js';
+import { detectRegistrationSources } from './services/scan.service.js';
 
 dotenv.config();
 const adapter = new PrismaBetterSqlite3({
@@ -35,7 +36,11 @@ const gmailScopes = [
 ];
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    service: 'regiscope-api',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/api/auth/google/url', (_req, res) => {
@@ -82,6 +87,41 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   const { accountId } = req.params;
 
   try {
+    const accountWithToken = await prisma.account.findUnique({
+      where: {
+        id: accountId,
+      },
+      include: {
+        oauthToken: true,
+      },
+    });
+
+    if (!accountWithToken?.oauthToken) {
+      res.status(400).json({
+        error: 'Google OAuth token is not connected for this account.',
+      });
+      return;
+    }
+
+    const accountOAuthClient = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    accountOAuthClient.setCredentials({
+      access_token: accountWithToken.oauthToken.accessToken ?? undefined,
+      refresh_token: accountWithToken.oauthToken.refreshToken ?? undefined,
+      scope: accountWithToken.oauthToken.scope ?? undefined,
+      token_type: accountWithToken.oauthToken.tokenType ?? undefined,
+      expiry_date: accountWithToken.oauthToken.expiryDate?.getTime(),
+    });
+
+    const gmail = google.gmail({
+      version: 'v1',
+      auth: accountOAuthClient,
+    });
+
     const account = await prisma.account.update({
       where: {
         id: accountId,
@@ -91,6 +131,20 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
         lastScanDate: new Date(),
       },
     });
+    const detectedSources = await detectRegistrationSources({ gmail });
+
+    await prisma.registrationSource.deleteMany({
+      where: {
+        accountId,
+      },
+    });
+
+    await prisma.registrationSource.createMany({
+      data: detectedSources.map((source) => ({
+        accountId,
+        ...source,
+      })),
+    });
 
     res.json(account);
   } catch (error) {
@@ -98,6 +152,29 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
 
     res.status(500).json({
       error: 'Failed to update account scan status.',
+    });
+  }
+});
+
+app.get('/api/accounts/:accountId/sources', async (req, res) => {
+  const { accountId } = req.params;
+
+  try {
+    const sources = await prisma.registrationSource.findMany({
+      where: {
+        accountId,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    res.json(sources);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to fetch registration sources.',
     });
   }
 });
@@ -147,8 +224,26 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
-    console.log('saved account:', account);
-
+    await prisma.googleOAuthToken.upsert({
+      where: {
+        accountId: account.id,
+      },
+      update: {
+        accessToken: tokens.access_token ?? undefined,
+        refreshToken: tokens.refresh_token ?? undefined,
+        scope: tokens.scope ?? undefined,
+        tokenType: tokens.token_type ?? undefined,
+        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+      },
+      create: {
+        accountId: account.id,
+        accessToken: tokens.access_token ?? null,
+        refreshToken: tokens.refresh_token ?? null,
+        scope: tokens.scope ?? null,
+        tokenType: tokens.token_type ?? null,
+        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      },
+    });
 
     const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
 
@@ -165,4 +260,5 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 
 app.listen(port, () => {
+  console.log(`API server running on http://localhost:${port}`);
 });

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { SourceService } from '../../../../core/services/source.service';
 import { RegistrationSource } from '../../../../models/registration-source.model';
@@ -167,17 +167,16 @@ import { RegistrationSource } from '../../../../models/registration-source.model
     </section>
   `,
 })
-export class SourcesComponent {
+export class SourcesComponent implements OnInit {
   private accountService = inject(AccountService);
   private sourceService = inject(SourceService);
 
   currentAccount = this.accountService.getCurrentAccount();
+  sourcesSnapshot: RegistrationSource[] = [];
 
-  sources = this.currentAccount
-    ? this.sourceService.getSourcesByAccountId(this.currentAccount.id)
-    : [];
-
-  urgentCount = this.sources.filter((source) => source.isUrgent).length;
+  get urgentCount(): number {
+    return this.sourcesSnapshot.filter((source) => source.isUrgent).length;
+  }
 
   selectedCategory: 'all' | 'newsletter' | 'payment' | 'account' | 'other' = 'all';
 
@@ -228,8 +227,19 @@ export class SourcesComponent {
     return scores[confidence];
   }
 
+  async ngOnInit(): Promise<void> {
+    this.currentAccount = this.accountService.getCurrentAccount();
+
+    if (!this.currentAccount) {
+      return;
+    }
+
+    await this.sourceService.loadSources(this.currentAccount.id);
+    this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
+  }
+
   get filteredSources() {
-    const filtered = this.sources.filter((source) => {
+    const filtered = this.sourcesSnapshot.filter((source) => {
       if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
         return false;
       }
@@ -337,6 +347,10 @@ export class SourcesComponent {
   }
 
   private getGmailSearchQuery(source: RegistrationSource): string {
+    if (source.gmailQuery) {
+      return source.gmailQuery;
+    }
+
     const baseQuery = `from:${source.senderEmail} newer_than:2y`;
 
     if (source.isUrgent) {
