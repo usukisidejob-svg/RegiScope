@@ -17,11 +17,13 @@ type DetectRegistrationSourcesOptions = {
 export async function detectRegistrationSources({
   gmail,
 }: DetectRegistrationSourcesOptions): Promise<DetectedRegistrationSource[]> {
-  await gmail.users.messages.list({
+  const messageList = await gmail.users.messages.list({
     userId: 'me',
     maxResults: 10,
     q: 'newer_than:1y',
   });
+
+  const hasRecentMessages = (messageList.data.messages?.length ?? 0) > 0;
 
   return [
     {
@@ -30,7 +32,7 @@ export async function detectRegistrationSources({
       category: 'subscription',
       confidence: 'high',
       frequency: 'monthly',
-      isUrgent: true,
+      isUrgent: hasRecentMessages,
       gmailQuery: 'from:netflix.com OR netflix',
     },
     {

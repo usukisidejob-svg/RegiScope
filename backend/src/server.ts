@@ -36,7 +36,11 @@ const gmailScopes = [
 ];
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    service: 'regiscope-api',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/api/auth/google/url', (_req, res) => {
@@ -257,4 +261,5 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
 
 app.listen(port, () => {
+  console.log(`API server running on http://localhost:${port}`);
 });
