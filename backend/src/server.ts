@@ -68,18 +68,16 @@ app.get('/api/auth/google/url', (_req, res) => {
 });
 app.get('/api/accounts', async (_req, res) => {
   try {
-    const accounts = await prisma.account.findMany({
-      where: {
-        oauthToken: {
-          isNot: null,
-        },
+    const oauthTokens = await prisma.googleOAuthToken.findMany({
+      include: {
+        account: true,
       },
       orderBy: {
         createdAt: 'asc',
       },
     });
 
-    res.json(accounts);
+    res.json(oauthTokens.map((oauthToken) => oauthToken.account));
   } catch (error) {
     console.error(error);
 
@@ -187,6 +185,7 @@ app.get('/api/accounts/:accountId/sources', async (req, res) => {
 
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
+  let callbackStep = 'validate_code';
 
   if (typeof code !== 'string') {
     res.status(400).json({
@@ -196,9 +195,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
   }
 
   try {
+    callbackStep = 'exchange_code';
     const { tokens } = await googleOAuthClient.getToken(code);
     googleOAuthClient.setCredentials(tokens);
 
+    callbackStep = 'get_gmail_profile';
     const gmail = google.gmail({
       version: 'v1',
       auth: googleOAuthClient,
@@ -216,6 +217,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
       return;
     }
 
+    callbackStep = 'upsert_account';
     const account = await prisma.account.upsert({
       where: {
         email,
@@ -229,17 +231,20 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
+    const tokenUpdateData = {
+      ...(tokens.access_token ? { accessToken: tokens.access_token } : {}),
+      ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+      ...(tokens.scope ? { scope: tokens.scope } : {}),
+      ...(tokens.token_type ? { tokenType: tokens.token_type } : {}),
+      ...(tokens.expiry_date ? { expiryDate: new Date(tokens.expiry_date) } : {}),
+    };
+
+    callbackStep = 'upsert_oauth_token';
     await prisma.googleOAuthToken.upsert({
       where: {
         accountId: account.id,
       },
-      update: {
-        accessToken: tokens.access_token ?? undefined,
-        refreshToken: tokens.refresh_token ?? undefined,
-        scope: tokens.scope ?? undefined,
-        tokenType: tokens.token_type ?? undefined,
-        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
-      },
+      update: tokenUpdateData,
       create: {
         accountId: account.id,
         accessToken: tokens.access_token ?? null,
@@ -250,15 +255,17 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
+    callbackStep = 'redirect_frontend';
     const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
 
     res.redirect(redirectUrl);
 
   } catch (error) {
-    console.error(error);
+    console.error(`Google OAuth callback failed at ${callbackStep}:`, error);
 
     res.status(500).json({
       error: 'Failed to handle Google OAuth callback.',
+      step: callbackStep,
     });
   }
 });
