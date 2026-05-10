@@ -69,6 +69,11 @@ app.get('/api/auth/google/url', (_req, res) => {
 app.get('/api/accounts', async (_req, res) => {
   try {
     const accounts = await prisma.account.findMany({
+      where: {
+        oauthToken: {
+          isNot: null,
+        },
+      },
       orderBy: {
         createdAt: 'asc',
       },
