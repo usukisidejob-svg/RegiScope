@@ -3,6 +3,7 @@ import type { gmail_v1 } from 'googleapis';
 export type DetectedRegistrationSource = {
   name: string;
   domain: string;
+  senderEmail: string;
   category: string;
   confidence: string;
   frequency: string | null;
@@ -129,6 +130,7 @@ function buildRegistrationSources(candidates: GmailMessageCandidate[]): Detected
       return {
         name: normalizeDisplayName(newestMessage.senderName, domain),
         domain,
+        senderEmail: sender,
         category,
         confidence: detectConfidence(messages, category),
         frequency: detectFrequency(messages),

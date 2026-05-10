@@ -7,6 +7,7 @@ type ApiRegistrationSource = {
   accountId: string;
   name: string;
   domain: string;
+  senderEmail: string | null;
   category: string;
   confidence: string;
   frequency: string | null;
@@ -50,7 +51,7 @@ export class SourceService {
       accountId: source.accountId,
       displayName: source.name,
       domain: source.domain,
-      senderEmail: `no-reply@${source.domain}`,
+      senderEmail: source.senderEmail ?? `no-reply@${source.domain}`,
       category: this.toSourceCategory(source.category),
       confidence: this.toConfidenceLevel(source.confidence),
       isUrgent: source.isUrgent,

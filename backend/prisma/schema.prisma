@@ -44,6 +44,7 @@ model RegistrationSource {
   accountId   String
   name        String
   domain      String
+  senderEmail String?
   category    String
   confidence  String
   frequency   String?
