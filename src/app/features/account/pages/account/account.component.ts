@@ -313,6 +313,7 @@ export class AccountComponent implements OnInit {
 
     try {
       await this.accountService.markAsScanned(account.id);
+      await this.router.navigate(['/sources']);
     } catch (error) {
       const message = error instanceof Error
         ? error.message
