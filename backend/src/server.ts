@@ -153,6 +153,14 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   } catch (error) {
     console.error(error);
 
+    if (isGoogleReauthRequiredError(error)) {
+      res.status(401).json({
+        error: 'Google認証の有効期限が切れています。再認証してください。',
+        code: 'GOOGLE_REAUTH_REQUIRED',
+      });
+      return;
+    }
+
     res.status(500).json({
       error: 'Failed to update account scan status.',
     });
@@ -274,3 +282,40 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.listen(port, () => {
   console.log(`API server running on http://localhost:${port}`);
 });
+
+function isGoogleReauthRequiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as {
+    code?: number | string;
+    status?: number;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        error?: string;
+        error_description?: string;
+      };
+    };
+  };
+
+  const status = maybeError.status ?? maybeError.response?.status;
+  const message = [
+    maybeError.message,
+    maybeError.response?.data?.error,
+    maybeError.response?.data?.error_description,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    message.includes('invalid_grant') ||
+    message.includes('invalid credentials') ||
+    message.includes('unauthorized')
+  );
+}

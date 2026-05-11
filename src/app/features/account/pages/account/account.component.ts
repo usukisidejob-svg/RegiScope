@@ -134,7 +134,17 @@ import { AccountService } from '../../../../core/services/account.service';
 
           @if (scanError) {
             <div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-              {{ scanError }}
+              <p>{{ scanError }}</p>
+
+              @if (scanNeedsReauth) {
+                <button
+                  type="button"
+                  class="mt-3 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700"
+                  (click)="connectGoogleAccount()"
+                >
+                  Googleで再認証
+                </button>
+              }
             </div>
           }
 
@@ -175,6 +185,7 @@ export class AccountComponent implements OnInit {
   accountLoadError = '';
   isScanning = false;
   scanError = '';
+  scanNeedsReauth = false;
 
   currentAccount$ = combineLatest([
     this.accountService.accounts$,
@@ -219,11 +230,17 @@ export class AccountComponent implements OnInit {
 
     this.isScanning = true;
     this.scanError = '';
+    this.scanNeedsReauth = false;
 
     try {
       await this.accountService.markAsScanned(account.id);
-    } catch {
-      this.scanError = 'スキャンに失敗しました。Google認証の有効期限が切れている場合は、再認証してください。';
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'スキャンに失敗しました。時間をおいて再度お試しください。';
+
+      this.scanError = message;
+      this.scanNeedsReauth = message.includes('再認証');
     } finally {
       this.isScanning = false;
     }

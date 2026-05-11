@@ -13,6 +13,10 @@ type ApiAccount = {
     updatedAt: string;
 };
 
+type ApiError = {
+    error?: string;
+};
+
 @Injectable({
     providedIn: 'root',
 })
@@ -95,7 +99,8 @@ export class AccountService {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to update account scan status.');
+            const errorBody = (await response.json().catch(() => ({}))) as ApiError;
+            throw new Error(errorBody.error ?? 'Failed to update account scan status.');
         }
 
         const updatedAccount = (await response.json()) as ApiAccount;
