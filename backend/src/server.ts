@@ -86,6 +86,27 @@ app.get('/api/accounts', async (_req, res) => {
     });
   }
 });
+
+app.delete('/api/accounts/:accountId', async (req, res) => {
+  const { accountId } = req.params;
+
+  try {
+    await prisma.account.delete({
+      where: {
+        id: accountId,
+      },
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to disconnect account.',
+    });
+  }
+});
+
 app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   const { accountId } = req.params;
 

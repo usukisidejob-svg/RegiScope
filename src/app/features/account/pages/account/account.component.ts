@@ -40,18 +40,26 @@ import { AccountService } from '../../../../core/services/account.service';
           </div>
         }
 
+        @if (disconnectError) {
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+            {{ disconnectError }}
+          </div>
+        }
+
         @if (accounts$ | async; as accounts) {
           <div class="space-y-3">
             @for (account of accounts; track account.id) {
-              <button
-                type="button"
+              <div
+                role="button"
+                tabindex="0"
                 class="w-full rounded-lg border p-4 text-left transition"
                 [class.border-blue-500]="account.id === (currentAccountId$ | async)"
                 [class.bg-blue-50]="account.id === (currentAccountId$ | async)"
                 [class.border-gray-200]="account.id !== (currentAccountId$ | async)"
-                [disabled]="isScanning"
                 [class.opacity-60]="isScanning"
                 (click)="switchAccount(account.id)"
+                (keydown.enter)="switchAccount(account.id)"
+                (keydown.space)="switchAccount(account.id)"
               >
                 <div class="flex items-center justify-between gap-4">
                   <div>
@@ -71,7 +79,7 @@ import { AccountService } from '../../../../core/services/account.service';
                   }
                 </div>
 
-                <div class="mt-2 text-sm">
+                <div class="mt-2 flex items-center justify-between gap-3 text-sm">
                   @if (account.hasScanned) {
                     <span class="text-green-600">
                       スキャン済み
@@ -81,8 +89,16 @@ import { AccountService } from '../../../../core/services/account.service';
                       未スキャン
                     </span>
                   }
+
+                  <button
+                    type="button"
+                    class="rounded-md px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                    (click)="disconnectAccount(account.id, $event)"
+                  >
+                    接続解除
+                  </button>
                 </div>
-              </button>
+              </div>
             }
 
             @if (isAddingAccount) {
@@ -186,6 +202,7 @@ export class AccountComponent implements OnInit {
   isScanning = false;
   scanError = '';
   scanNeedsReauth = false;
+  disconnectError = '';
 
   currentAccount$ = combineLatest([
     this.accountService.accounts$,
@@ -197,7 +214,28 @@ export class AccountComponent implements OnInit {
   );
 
   switchAccount(accountId: string): void {
+    if (this.isScanning) {
+      return;
+    }
+
     this.accountService.switchAccount(accountId);
+  }
+
+  async disconnectAccount(accountId: string, event: Event): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.isScanning) {
+      return;
+    }
+
+    this.disconnectError = '';
+
+    try {
+      await this.accountService.disconnectAccount(accountId);
+    } catch {
+      this.disconnectError = 'Gmailアカウントの接続解除に失敗しました。時間をおいて再度お試しください。';
+    }
   }
 
   showAddAccountForm(): void {
