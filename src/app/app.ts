@@ -4,6 +4,6 @@ import { LayoutComponent } from './shared/components/layout/layout.component';
 @Component({
   selector: 'app-root',
   imports: [LayoutComponent],
-  template: `<app-layout />`
+  templateUrl: './app.html',
 })
 export class App {}
