@@ -26,36 +26,86 @@ type GmailMessageCandidate = {
   date: Date | null;
 };
 
+const MAX_MESSAGES_TO_SCAN = 200;
+const MESSAGE_DETAIL_BATCH_SIZE = 5;
+const IGNORED_SENDER_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.co.jp',
+]);
+
 export async function detectRegistrationSources({
   gmail,
 }: DetectRegistrationSourcesOptions): Promise<DetectedRegistrationSource[]> {
-  const messageList = await gmail.users.messages.list({
-    userId: 'me',
-    maxResults: 50,
-    q: 'newer_than:1y',
-  });
-
-  const messages = messageList.data.messages ?? [];
-  const candidates = await Promise.all(
-    messages.map(async (message) => {
-      if (!message.id) {
-        return null;
-      }
-
-      const detail = await gmail.users.messages.get({
-        userId: 'me',
-        id: message.id,
-        format: 'metadata',
-        metadataHeaders: ['From', 'Subject', 'Date'],
-      });
-
-      return toGmailMessageCandidate(detail.data);
-    }),
-  );
+  const messages = await listRecentMessages(gmail);
+  const candidates = await fetchMessageCandidates(gmail, messages);
 
   return buildRegistrationSources(
     candidates.filter((candidate): candidate is GmailMessageCandidate => candidate !== null),
   );
+}
+
+async function listRecentMessages(gmail: gmail_v1.Gmail): Promise<gmail_v1.Schema$Message[]> {
+  const messages: gmail_v1.Schema$Message[] = [];
+  let pageToken: string | undefined;
+
+  while (messages.length < MAX_MESSAGES_TO_SCAN) {
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: Math.min(50, MAX_MESSAGES_TO_SCAN - messages.length),
+      pageToken,
+      q: 'newer_than:1y',
+    });
+
+    messages.push(...(response.data.messages ?? []));
+
+    pageToken = response.data.nextPageToken ?? undefined;
+
+    if (!pageToken) {
+      break;
+    }
+  }
+
+  return messages;
+}
+
+async function fetchMessageCandidates(
+  gmail: gmail_v1.Gmail,
+  messages: gmail_v1.Schema$Message[],
+): Promise<Array<GmailMessageCandidate | null>> {
+  const candidates: Array<GmailMessageCandidate | null> = [];
+
+  for (let index = 0; index < messages.length; index += MESSAGE_DETAIL_BATCH_SIZE) {
+    const batch = messages.slice(index, index + MESSAGE_DETAIL_BATCH_SIZE);
+    const batchCandidates = await Promise.all(
+      batch.map(async (message) => {
+        if (!message.id) {
+          return null;
+        }
+
+        const detail = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id,
+          format: 'metadata',
+          metadataHeaders: ['From', 'Subject', 'Date'],
+        });
+
+        return toGmailMessageCandidate(detail.data);
+      }),
+    );
+
+    candidates.push(...batchCandidates);
+  }
+
+  return candidates;
 }
 
 function toGmailMessageCandidate(message: gmail_v1.Schema$Message): GmailMessageCandidate | null {
@@ -74,10 +124,16 @@ function toGmailMessageCandidate(message: gmail_v1.Schema$Message): GmailMessage
     return null;
   }
 
+  const normalizedDomain = normalizeSenderDomain(parsedSender.email);
+
+  if (!normalizedDomain || IGNORED_SENDER_DOMAINS.has(normalizedDomain)) {
+    return null;
+  }
+
   return {
     senderEmail: parsedSender.email,
     senderName: parsedSender.name,
-    domain: parsedSender.email.split('@')[1],
+    domain: normalizedDomain,
     subject,
     date: dateHeader ? new Date(dateHeader) : null,
   };
@@ -153,7 +209,7 @@ function buildRegistrationSources(candidates: GmailMessageCandidate[]): Detected
 }
 
 function normalizeDisplayName(senderName: string | null, domain: string): string {
-  if (senderName) {
+  if (senderName && !/^(no-?reply|notification|notifications|info|support)$/i.test(senderName)) {
     return senderName;
   }
 
@@ -161,6 +217,30 @@ function normalizeDisplayName(senderName: string | null, domain: string): string
     .split('.')[0]
     .replace(/[-_]/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeSenderDomain(email: string): string | null {
+  const rawDomain = email.split('@')[1]?.toLowerCase();
+
+  if (!rawDomain) {
+    return null;
+  }
+
+  const domain = rawDomain.replace(/^(mail|email|notify|notification|notifications|newsletter|news|bounce)\./, '');
+  const parts = domain.split('.').filter(Boolean);
+
+  if (parts.length <= 2) {
+    return domain;
+  }
+
+  const lastTwoParts = parts.slice(-2).join('.');
+  const lastThreeParts = parts.slice(-3).join('.');
+
+  if (/^(co|ne|or|ac|go)\.jp$/.test(lastTwoParts)) {
+    return lastThreeParts;
+  }
+
+  return lastTwoParts;
 }
 
 function detectCategory(messages: GmailMessageCandidate[]): string {

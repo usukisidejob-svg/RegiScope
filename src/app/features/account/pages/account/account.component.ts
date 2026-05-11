@@ -1,5 +1,5 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { combineLatest, map } from 'rxjs';
 import { AccountService } from '../../../../core/services/account.service';
@@ -28,16 +28,38 @@ import { AccountService } from '../../../../core/services/account.service';
           }
         </div>
 
+        @if (isLoadingAccounts) {
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-gray-600">
+            アカウントを読み込んでいます。
+          </div>
+        }
+
+        @if (accountLoadError) {
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+            {{ accountLoadError }}
+          </div>
+        }
+
+        @if (disconnectError) {
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+            {{ disconnectError }}
+          </div>
+        }
+
         @if (accounts$ | async; as accounts) {
           <div class="space-y-3">
             @for (account of accounts; track account.id) {
-              <button
-                type="button"
+              <div
+                role="button"
+                tabindex="0"
                 class="w-full rounded-lg border p-4 text-left transition"
                 [class.border-blue-500]="account.id === (currentAccountId$ | async)"
                 [class.bg-blue-50]="account.id === (currentAccountId$ | async)"
                 [class.border-gray-200]="account.id !== (currentAccountId$ | async)"
+                [class.opacity-60]="isScanning"
                 (click)="switchAccount(account.id)"
+                (keydown.enter)="switchAccount(account.id)"
+                (keydown.space)="switchAccount(account.id)"
               >
                 <div class="flex items-center justify-between gap-4">
                   <div>
@@ -57,7 +79,7 @@ import { AccountService } from '../../../../core/services/account.service';
                   }
                 </div>
 
-                <div class="mt-2 text-sm">
+                <div class="mt-2 flex items-center justify-between gap-3 text-sm">
                   @if (account.hasScanned) {
                     <span class="text-green-600">
                       スキャン済み
@@ -67,8 +89,36 @@ import { AccountService } from '../../../../core/services/account.service';
                       未スキャン
                     </span>
                   }
+
+                  @if (pendingDisconnectAccountId === account.id) {
+                    <div class="flex items-center gap-2" (click)="$event.stopPropagation()">
+                      <span class="text-xs text-red-600">解除しますか？</span>
+                      <button
+                        type="button"
+                        class="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-700"
+                        (click)="confirmDisconnectAccount(account.id, $event)"
+                      >
+                        解除
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 transition hover:bg-gray-200"
+                        (click)="cancelDisconnectAccount($event)"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  } @else {
+                    <button
+                      type="button"
+                      class="rounded-md px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                      (click)="requestDisconnectAccount(account.id, $event)"
+                    >
+                      接続解除
+                    </button>
+                  }
                 </div>
-              </button>
+              </div>
             }
 
             @if (isAddingAccount) {
@@ -102,6 +152,12 @@ import { AccountService } from '../../../../core/services/account.service';
                 ＋ 別のGmailアカウントを追加
               </button>
             }
+
+            @if (accounts.length === 0 && !isLoadingAccounts && !accountLoadError) {
+              <div class="rounded-lg border border-dashed border-gray-300 p-4 text-gray-500">
+                接続済みのGmailアカウントはまだありません。
+              </div>
+            }
           </div>
         }
       </div>
@@ -112,12 +168,31 @@ import { AccountService } from '../../../../core/services/account.service';
             Gmailの受信トレイをスキャンして、登録先候補（メルマガ、支払い、アカウント等）を抽出します。
           </p>
 
+          @if (scanError) {
+            <div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+              <p>{{ scanError }}</p>
+
+              @if (scanNeedsReauth) {
+                <button
+                  type="button"
+                  class="mt-3 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700"
+                  (click)="connectGoogleAccount()"
+                >
+                  Googleで再認証
+                </button>
+              }
+            </div>
+          }
+
           <button
             type="button"
             class="mt-8 w-full rounded-xl bg-blue-600 px-4 py-5 text-xl font-bold text-white transition hover:bg-blue-700"
+            [disabled]="isScanning"
+            [class.cursor-not-allowed]="isScanning"
+            [class.opacity-70]="isScanning"
             (click)="onScan()"
           >
-            ↻ {{ currentAccount.hasScanned ? '再スキャン' : 'スキャン開始' }}
+            ↻ {{ isScanning ? 'スキャン中...' : currentAccount.hasScanned ? '再スキャン' : 'スキャン開始' }}
           </button>
 
           @if (currentAccount.hasScanned) {
@@ -142,6 +217,13 @@ export class AccountComponent implements OnInit {
   accounts$ = this.accountService.accounts$;
   currentAccountId$ = this.accountService.currentAccountId$;
   isAddingAccount = false;
+  isLoadingAccounts = false;
+  accountLoadError = '';
+  isScanning = false;
+  scanError = '';
+  scanNeedsReauth = false;
+  disconnectError = '';
+  pendingDisconnectAccountId: string | null = null;
 
   currentAccount$ = combineLatest([
     this.accountService.accounts$,
@@ -153,7 +235,48 @@ export class AccountComponent implements OnInit {
   );
 
   switchAccount(accountId: string): void {
+    if (this.isScanning) {
+      return;
+    }
+
     this.accountService.switchAccount(accountId);
+  }
+
+  requestDisconnectAccount(accountId: string, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.isScanning) {
+      return;
+    }
+
+    this.disconnectError = '';
+    this.pendingDisconnectAccountId = accountId;
+  }
+
+  cancelDisconnectAccount(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.pendingDisconnectAccountId = null;
+  }
+
+  async confirmDisconnectAccount(accountId: string, event: Event): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.isScanning) {
+      return;
+    }
+
+    this.disconnectError = '';
+
+    try {
+      await this.accountService.disconnectAccount(accountId);
+      this.pendingDisconnectAccountId = null;
+    } catch {
+      this.disconnectError = 'Gmailアカウントの接続解除に失敗しました。時間をおいて再度お試しください。';
+    }
   }
 
   showAddAccountForm(): void {
@@ -165,23 +288,60 @@ export class AccountComponent implements OnInit {
   }
 
   async connectGoogleAccount(): Promise<void> {
-    await this.accountService.connectGoogleAccount();
-    this.cancelAddAccount();
+    try {
+      await this.accountService.connectGoogleAccount();
+      this.cancelAddAccount();
+    } catch {
+      this.accountLoadError = 'Google認証URLの取得に失敗しました。時間をおいて再度お試しください。';
+    }
   }
 
   async onScan(): Promise<void> {
+    if (this.isScanning) {
+      return;
+    }
+
     const account = this.accountService.getCurrentAccount();
 
     if (!account) {
       return;
     }
 
-    await this.accountService.markAsScanned(account.id);
+    this.isScanning = true;
+    this.scanError = '';
+    this.scanNeedsReauth = false;
+
+    try {
+      await this.accountService.markAsScanned(account.id);
+      await this.router.navigate(['/sources'], {
+        queryParams: {
+          accountId: account.id,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'スキャンに失敗しました。時間をおいて再度お試しください。';
+
+      this.scanError = message;
+      this.scanNeedsReauth = message.includes('再認証');
+    } finally {
+      this.isScanning = false;
+    }
   }
   async ngOnInit(): Promise<void> {
     const connectedEmail = this.route.snapshot.queryParamMap.get('connectedEmail');
 
-    await this.accountService.loadAccounts(connectedEmail ?? undefined);
+    this.isLoadingAccounts = true;
+    this.accountLoadError = '';
+
+    try {
+      await this.accountService.loadAccounts(connectedEmail ?? undefined);
+    } catch {
+      this.accountLoadError = 'アカウント一覧の読み込みに失敗しました。backendが起動しているか確認してください。';
+    } finally {
+      this.isLoadingAccounts = false;
+    }
 
     if (!connectedEmail) {
       return;

@@ -68,13 +68,16 @@ app.get('/api/auth/google/url', (_req, res) => {
 });
 app.get('/api/accounts', async (_req, res) => {
   try {
-    const accounts = await prisma.account.findMany({
+    const oauthTokens = await prisma.googleOAuthToken.findMany({
+      include: {
+        account: true,
+      },
       orderBy: {
         createdAt: 'asc',
       },
     });
 
-    res.json(accounts);
+    res.json(oauthTokens.map((oauthToken) => oauthToken.account));
   } catch (error) {
     console.error(error);
 
@@ -83,6 +86,49 @@ app.get('/api/accounts', async (_req, res) => {
     });
   }
 });
+
+app.delete('/api/accounts/:accountId', async (req, res) => {
+  const { accountId } = req.params;
+
+  try {
+    const account = await prisma.account.findUnique({
+      where: {
+        id: accountId,
+      },
+      include: {
+        oauthToken: true,
+      },
+    });
+
+    if (!account) {
+      res.status(204).send();
+      return;
+    }
+
+    const tokenToRevoke = account.oauthToken?.refreshToken ?? account.oauthToken?.accessToken;
+
+    if (tokenToRevoke) {
+      await googleOAuthClient.revokeToken(tokenToRevoke).catch((error) => {
+        console.error('Failed to revoke Google OAuth token:', error);
+      });
+    }
+
+    await prisma.account.delete({
+      where: {
+        id: accountId,
+      },
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Failed to disconnect account.',
+    });
+  }
+});
+
 app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   const { accountId } = req.params;
 
@@ -150,6 +196,14 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
   } catch (error) {
     console.error(error);
 
+    if (isGoogleReauthRequiredError(error)) {
+      res.status(401).json({
+        error: 'Google認証の有効期限が切れています。再認証してください。',
+        code: 'GOOGLE_REAUTH_REQUIRED',
+      });
+      return;
+    }
+
     res.status(500).json({
       error: 'Failed to update account scan status.',
     });
@@ -182,6 +236,7 @@ app.get('/api/accounts/:accountId/sources', async (req, res) => {
 
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
+  let callbackStep = 'validate_code';
 
   if (typeof code !== 'string') {
     res.status(400).json({
@@ -191,9 +246,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
   }
 
   try {
+    callbackStep = 'exchange_code';
     const { tokens } = await googleOAuthClient.getToken(code);
     googleOAuthClient.setCredentials(tokens);
 
+    callbackStep = 'get_gmail_profile';
     const gmail = google.gmail({
       version: 'v1',
       auth: googleOAuthClient,
@@ -211,6 +268,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
       return;
     }
 
+    callbackStep = 'upsert_account';
     const account = await prisma.account.upsert({
       where: {
         email,
@@ -224,17 +282,20 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
+    const tokenUpdateData = {
+      ...(tokens.access_token ? { accessToken: tokens.access_token } : {}),
+      ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+      ...(tokens.scope ? { scope: tokens.scope } : {}),
+      ...(tokens.token_type ? { tokenType: tokens.token_type } : {}),
+      ...(tokens.expiry_date ? { expiryDate: new Date(tokens.expiry_date) } : {}),
+    };
+
+    callbackStep = 'upsert_oauth_token';
     await prisma.googleOAuthToken.upsert({
       where: {
         accountId: account.id,
       },
-      update: {
-        accessToken: tokens.access_token ?? undefined,
-        refreshToken: tokens.refresh_token ?? undefined,
-        scope: tokens.scope ?? undefined,
-        tokenType: tokens.token_type ?? undefined,
-        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
-      },
+      update: tokenUpdateData,
       create: {
         accountId: account.id,
         accessToken: tokens.access_token ?? null,
@@ -245,15 +306,17 @@ app.get('/api/auth/google/callback', async (req, res) => {
       },
     });
 
+    callbackStep = 'redirect_frontend';
     const redirectUrl = `${frontendOrigin}/account?connectedEmail=${encodeURIComponent(email ?? '')}`;
 
     res.redirect(redirectUrl);
 
   } catch (error) {
-    console.error(error);
+    console.error(`Google OAuth callback failed at ${callbackStep}:`, error);
 
     res.status(500).json({
       error: 'Failed to handle Google OAuth callback.',
+      step: callbackStep,
     });
   }
 });
@@ -262,3 +325,40 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.listen(port, () => {
   console.log(`API server running on http://localhost:${port}`);
 });
+
+function isGoogleReauthRequiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as {
+    code?: number | string;
+    status?: number;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        error?: string;
+        error_description?: string;
+      };
+    };
+  };
+
+  const status = maybeError.status ?? maybeError.response?.status;
+  const message = [
+    maybeError.message,
+    maybeError.response?.data?.error,
+    maybeError.response?.data?.error_description,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    message.includes('invalid_grant') ||
+    message.includes('invalid credentials') ||
+    message.includes('unauthorized')
+  );
+}

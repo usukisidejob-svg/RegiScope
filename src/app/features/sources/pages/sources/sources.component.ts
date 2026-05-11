@@ -1,11 +1,14 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AccountService } from '../../../../core/services/account.service';
 import { SourceService } from '../../../../core/services/source.service';
+import { AccountViewModel } from '../../../../models/account.model';
 import { RegistrationSource } from '../../../../models/registration-source.model';
 
 @Component({
   selector: 'app-sources',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <section class="mx-auto max-w-5xl space-y-6">
       <div>
@@ -13,15 +16,46 @@ import { RegistrationSource } from '../../../../models/registration-source.model
         <p class="mt-2 text-gray-600">登録先候補の一覧</p>
       </div>
 
-      @if (currentAccount) {
+      @if (currentAccount()) {
         <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <p class="text-sm text-blue-700">スキャン対象アカウント</p>
           <p class="mt-1 font-semibold text-blue-900">
-            {{ currentAccount.email }}
+            {{ currentAccount()?.email }}
           </p>
         </div>
       }
 
+      @if (isLoadingSources()) {
+        <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
+          登録先候補を読み込んでいます。
+        </div>
+      }
+
+      @if (sourceLoadError()) {
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          {{ sourceLoadError() }}
+        </div>
+      }
+
+      @if (!isLoadingSources() && !sourceLoadError() && !currentAccount()) {
+        <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
+          スキャン対象のGmailアカウントが選択されていません。
+          <a routerLink="/account" class="font-semibold text-blue-700 hover:underline">
+            Account画面でアカウントを選択してください。
+          </a>
+        </div>
+      }
+
+      @if (!isLoadingSources() && !sourceLoadError() && currentAccount() && !currentAccount()?.hasScanned) {
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800">
+          このGmailアカウントはまだスキャンされていません。
+          <a routerLink="/account" class="font-semibold text-amber-900 underline">
+            Account画面でスキャンを開始してください。
+          </a>
+        </div>
+      }
+
+      @if (!isLoadingSources() && !sourceLoadError() && currentAccount()?.hasScanned) {
       <div class="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
         <div>
           <p class="mb-3 text-sm font-semibold text-gray-700">ソート</p>
@@ -121,7 +155,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
       }
 
       <div class="space-y-3">
-        @for (source of filteredSources; track source.id) {
+        @for (source of paginatedSources; track source.id) {
           <article class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between gap-4">
               <div>
@@ -129,10 +163,13 @@ import { RegistrationSource } from '../../../../models/registration-source.model
                   {{ source.displayName }}
                 </h2>
                 <p class="text-sm text-gray-500">
-                  {{ source.domain }}
+                  {{ source.domain }} ・ {{ source.senderEmail }}
                 </p>
                 <p class="mt-1 text-sm text-gray-500">
                   頻度: {{ getFrequencyLabel(source) }}
+                </p>
+                <p class="mt-1 text-sm text-gray-500">
+                  検出: {{ source.frequency.count }}件 ・ 最終: {{ formatDate(source.lastSeen) }}
                 </p>
               </div>
 
@@ -150,7 +187,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
                 rel="noopener noreferrer"
                 class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
-                Gmailで検索
+                {{ source.isUrgent ? '至急メールを検索' : 'Gmailで検索' }}
               </a>
             </div>
 
@@ -160,22 +197,77 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </article>
         } @empty {
           <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-500">
-            このアカウントの登録先候補はまだありません。
+            @if (sourcesSnapshot().length === 0) {
+              このアカウントの登録先候補はまだありません。
+            } @else {
+              条件に一致する登録先候補はありません。
+            }
           </div>
         }
       </div>
+
+      @if (filteredSources.length > pageSize) {
+        <nav
+          class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4"
+          aria-label="登録先候補のページネーション"
+        >
+          <p class="text-sm text-gray-600">
+            {{ pageStartItem }}-{{ pageEndItem }}件目 / {{ filteredSources.length }}件
+          </p>
+
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="currentPage() === 1"
+              (click)="goToPreviousPage()"
+            >
+              前へ
+            </button>
+
+            @for (page of visiblePages; track page) {
+              <button
+                type="button"
+                class="h-9 min-w-9 rounded-lg px-3 text-sm font-semibold transition"
+                [class.bg-blue-600]="currentPage() === page"
+                [class.text-white]="currentPage() === page"
+                [class.bg-gray-100]="currentPage() !== page"
+                [class.text-gray-700]="currentPage() !== page"
+                (click)="goToPage(page)"
+              >
+                {{ page }}
+              </button>
+            }
+
+            <button
+              type="button"
+              class="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="currentPage() === totalPages"
+              (click)="goToNextPage()"
+            >
+              次へ
+            </button>
+          </div>
+        </nav>
+      }
+      }
     </section>
   `,
 })
 export class SourcesComponent implements OnInit {
   private accountService = inject(AccountService);
   private sourceService = inject(SourceService);
+  private route = inject(ActivatedRoute);
 
-  currentAccount = this.accountService.getCurrentAccount();
-  sourcesSnapshot: RegistrationSource[] = [];
+  currentAccount = signal<AccountViewModel | undefined>(this.accountService.getCurrentAccount());
+  sourcesSnapshot = signal<RegistrationSource[]>([]);
+  isLoadingSources = signal(false);
+  sourceLoadError = signal('');
+  currentPage = signal(1);
+  readonly pageSize = 5;
 
   get urgentCount(): number {
-    return this.sourcesSnapshot.filter((source) => source.isUrgent).length;
+    return this.sourcesSnapshot().filter((source) => source.isUrgent).length;
   }
 
   selectedCategory: 'all' | 'newsletter' | 'payment' | 'account' | 'other' = 'all';
@@ -228,18 +320,39 @@ export class SourcesComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    this.currentAccount = this.accountService.getCurrentAccount();
+    this.isLoadingSources.set(true);
+    this.sourceLoadError.set('');
 
-    if (!this.currentAccount) {
-      return;
+    try {
+      const requestedAccountId = this.route.snapshot.queryParamMap.get('accountId');
+
+      await this.accountService.loadAccounts();
+
+      if (
+        requestedAccountId &&
+        this.accountService.getAccountsSnapshot().some((account) => account.id === requestedAccountId)
+      ) {
+        this.accountService.switchAccount(requestedAccountId);
+      }
+
+      this.currentAccount.set(this.accountService.getCurrentAccount());
+
+      if (!this.currentAccount() || !this.currentAccount()?.hasScanned) {
+        this.sourcesSnapshot.set([]);
+        return;
+      }
+
+      await this.sourceService.loadSources(this.currentAccount()!.id);
+      this.sourcesSnapshot.set(this.sourceService.getSourcesSnapshot());
+    } catch {
+      this.sourceLoadError.set('登録先候補の読み込みに失敗しました。backendが起動しているか確認してください。');
+    } finally {
+      this.isLoadingSources.set(false);
     }
-
-    await this.sourceService.loadSources(this.currentAccount.id);
-    this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
   }
 
   get filteredSources() {
-    const filtered = this.sourcesSnapshot.filter((source) => {
+    const filtered = this.sourcesSnapshot().filter((source) => {
       if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
         return false;
       }
@@ -278,6 +391,58 @@ export class SourcesComponent implements OnInit {
 
       return 0;
     });
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredSources.length / this.pageSize));
+  }
+
+  get paginatedSources(): RegistrationSource[] {
+    this.ensureCurrentPageInRange();
+
+    const startIndex = (this.currentPage() - 1) * this.pageSize;
+    return this.filteredSources.slice(startIndex, startIndex + this.pageSize);
+  }
+
+  get pageStartItem(): number {
+    if (this.filteredSources.length === 0) {
+      return 0;
+    }
+
+    return (this.currentPage() - 1) * this.pageSize + 1;
+  }
+
+  get pageEndItem(): number {
+    return Math.min(this.currentPage() * this.pageSize, this.filteredSources.length);
+  }
+
+  get visiblePages(): number[] {
+    const pages: number[] = [];
+
+    for (let page = 1; page <= this.totalPages; page += 1) {
+      pages.push(page);
+    }
+
+    return pages;
+  }
+
+  goToPage(page: number): void {
+    const nextPage = Math.min(Math.max(page, 1), this.totalPages);
+    this.currentPage.set(nextPage);
+  }
+
+  goToPreviousPage(): void {
+    this.goToPage(this.currentPage() - 1);
+  }
+
+  goToNextPage(): void {
+    this.goToPage(this.currentPage() + 1);
+  }
+
+  private ensureCurrentPageInRange(): void {
+    if (this.currentPage() > this.totalPages) {
+      this.currentPage.set(this.totalPages);
+    }
   }
 
   private isWithinSelectedPeriod(date: Date): boolean {
@@ -340,6 +505,14 @@ export class SourcesComponent implements OnInit {
     return `${source.frequency.period}日間で${source.frequency.count}回`;
   }
 
+  formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  }
+
   getGmailSearchUrl(source: RegistrationSource): string {
     return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(
       this.getGmailSearchQuery(source),
@@ -347,14 +520,20 @@ export class SourcesComponent implements OnInit {
   }
 
   private getGmailSearchQuery(source: RegistrationSource): string {
+    const urgentQuery = '{overdue failed suspended "action required" urgent 至急 失敗 停止 要対応}';
+
     if (source.gmailQuery) {
+      if (source.isUrgent) {
+        return `${source.gmailQuery} ${urgentQuery}`;
+      }
+
       return source.gmailQuery;
     }
 
     const baseQuery = `from:${source.senderEmail} newer_than:2y`;
 
     if (source.isUrgent) {
-      return `${baseQuery} {overdue failed suspended "action required" urgent}`;
+      return `${baseQuery} ${urgentQuery}`;
     }
 
     if (source.category === 'payment') {

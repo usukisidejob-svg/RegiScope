@@ -51,3 +51,4 @@ backend/dist/server.js
 /backend/dev.db-shm
 
 backend/dev.db
+backend/prisma/dev.db

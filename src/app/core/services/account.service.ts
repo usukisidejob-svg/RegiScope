@@ -13,6 +13,10 @@ type ApiAccount = {
     updatedAt: string;
 };
 
+type ApiError = {
+    error?: string;
+};
+
 @Injectable({
     providedIn: 'root',
 })
@@ -65,6 +69,26 @@ export class AccountService {
         this.currentAccountIdSubject.next(accountId);
     }
 
+    async disconnectAccount(accountId: string): Promise<void> {
+        const response = await fetch(`${this.apiBaseUrl}/api/accounts/${accountId}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            const errorBody = (await response.json().catch(() => ({}))) as ApiError;
+            throw new Error(errorBody.error ?? 'Failed to disconnect account.');
+        }
+
+        const updatedAccounts = this.accountsSubject.value.filter((account) => account.id !== accountId);
+        this.accountsSubject.next(updatedAccounts);
+
+        if (this.currentAccountIdSubject.value !== accountId) {
+            return;
+        }
+
+        this.currentAccountIdSubject.next(updatedAccounts[0]?.id ?? null);
+    }
+
     /**
      * 【action】
      * Google認証画面へ遷移する
@@ -95,7 +119,8 @@ export class AccountService {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to update account scan status.');
+            const errorBody = (await response.json().catch(() => ({}))) as ApiError;
+            throw new Error(errorBody.error ?? 'Failed to update account scan status.');
         }
 
         const updatedAccount = (await response.json()) as ApiAccount;
@@ -126,6 +151,7 @@ export class AccountService {
     }
 
     async loadAccounts(selectedEmail?: string): Promise<void> {
+        const currentAccountId = this.currentAccountIdSubject.value;
         const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
 
         if (!response.ok) {
@@ -155,8 +181,11 @@ export class AccountService {
         const selectedAccount = selectedEmail
             ? viewModels.find((account) => account.email === selectedEmail)
             : undefined;
+        const currentAccount = currentAccountId
+            ? viewModels.find((account) => account.id === currentAccountId)
+            : undefined;
 
-        this.switchAccount(selectedAccount?.id ?? viewModels[0].id);
+        this.switchAccount(selectedAccount?.id ?? currentAccount?.id ?? viewModels[0].id);
     }
 
 }
