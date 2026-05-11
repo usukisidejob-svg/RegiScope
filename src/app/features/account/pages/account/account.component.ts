@@ -90,13 +90,33 @@ import { AccountService } from '../../../../core/services/account.service';
                     </span>
                   }
 
-                  <button
-                    type="button"
-                    class="rounded-md px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                    (click)="disconnectAccount(account.id, $event)"
-                  >
-                    接続解除
-                  </button>
+                  @if (pendingDisconnectAccountId === account.id) {
+                    <div class="flex items-center gap-2" (click)="$event.stopPropagation()">
+                      <span class="text-xs text-red-600">解除しますか？</span>
+                      <button
+                        type="button"
+                        class="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-700"
+                        (click)="confirmDisconnectAccount(account.id, $event)"
+                      >
+                        解除
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 transition hover:bg-gray-200"
+                        (click)="cancelDisconnectAccount($event)"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  } @else {
+                    <button
+                      type="button"
+                      class="rounded-md px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                      (click)="requestDisconnectAccount(account.id, $event)"
+                    >
+                      接続解除
+                    </button>
+                  }
                 </div>
               </div>
             }
@@ -203,6 +223,7 @@ export class AccountComponent implements OnInit {
   scanError = '';
   scanNeedsReauth = false;
   disconnectError = '';
+  pendingDisconnectAccountId: string | null = null;
 
   currentAccount$ = combineLatest([
     this.accountService.accounts$,
@@ -221,7 +242,26 @@ export class AccountComponent implements OnInit {
     this.accountService.switchAccount(accountId);
   }
 
-  async disconnectAccount(accountId: string, event: Event): Promise<void> {
+  requestDisconnectAccount(accountId: string, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.isScanning) {
+      return;
+    }
+
+    this.disconnectError = '';
+    this.pendingDisconnectAccountId = accountId;
+  }
+
+  cancelDisconnectAccount(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.pendingDisconnectAccountId = null;
+  }
+
+  async confirmDisconnectAccount(accountId: string, event: Event): Promise<void> {
     event.preventDefault();
     event.stopPropagation();
 
@@ -233,6 +273,7 @@ export class AccountComponent implements OnInit {
 
     try {
       await this.accountService.disconnectAccount(accountId);
+      this.pendingDisconnectAccountId = null;
     } catch {
       this.disconnectError = 'Gmailアカウントの接続解除に失敗しました。時間をおいて再度お試しください。';
     }
