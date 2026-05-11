@@ -313,7 +313,11 @@ export class AccountComponent implements OnInit {
 
     try {
       await this.accountService.markAsScanned(account.id);
-      await this.router.navigate(['/sources']);
+      await this.router.navigate(['/sources'], {
+        queryParams: {
+          accountId: account.id,
+        },
+      });
     } catch (error) {
       const message = error instanceof Error
         ? error.message

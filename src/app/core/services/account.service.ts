@@ -151,6 +151,7 @@ export class AccountService {
     }
 
     async loadAccounts(selectedEmail?: string): Promise<void> {
+        const currentAccountId = this.currentAccountIdSubject.value;
         const response = await fetch(`${this.apiBaseUrl}/api/accounts`);
 
         if (!response.ok) {
@@ -180,8 +181,11 @@ export class AccountService {
         const selectedAccount = selectedEmail
             ? viewModels.find((account) => account.email === selectedEmail)
             : undefined;
+        const currentAccount = currentAccountId
+            ? viewModels.find((account) => account.id === currentAccountId)
+            : undefined;
 
-        this.switchAccount(selectedAccount?.id ?? viewModels[0].id);
+        this.switchAccount(selectedAccount?.id ?? currentAccount?.id ?? viewModels[0].id);
     }
 
 }

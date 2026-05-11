@@ -1,7 +1,8 @@
-import { Component, inject, OnInit } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AccountService } from '../../../../core/services/account.service';
 import { SourceService } from '../../../../core/services/source.service';
+import { AccountViewModel } from '../../../../models/account.model';
 import { RegistrationSource } from '../../../../models/registration-source.model';
 
 @Component({
@@ -15,28 +16,28 @@ import { RegistrationSource } from '../../../../models/registration-source.model
         <p class="mt-2 text-gray-600">登録先候補の一覧</p>
       </div>
 
-      @if (currentAccount) {
+      @if (currentAccount()) {
         <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <p class="text-sm text-blue-700">スキャン対象アカウント</p>
           <p class="mt-1 font-semibold text-blue-900">
-            {{ currentAccount.email }}
+            {{ currentAccount()?.email }}
           </p>
         </div>
       }
 
-      @if (isLoadingSources) {
+      @if (isLoadingSources()) {
         <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
           登録先候補を読み込んでいます。
         </div>
       }
 
-      @if (sourceLoadError) {
+      @if (sourceLoadError()) {
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-          {{ sourceLoadError }}
+          {{ sourceLoadError() }}
         </div>
       }
 
-      @if (!isLoadingSources && !sourceLoadError && !currentAccount) {
+      @if (!isLoadingSources() && !sourceLoadError() && !currentAccount()) {
         <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
           スキャン対象のGmailアカウントが選択されていません。
           <a routerLink="/account" class="font-semibold text-blue-700 hover:underline">
@@ -45,7 +46,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
         </div>
       }
 
-      @if (!isLoadingSources && !sourceLoadError && currentAccount && !currentAccount.hasScanned) {
+      @if (!isLoadingSources() && !sourceLoadError() && currentAccount() && !currentAccount()?.hasScanned) {
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800">
           このGmailアカウントはまだスキャンされていません。
           <a routerLink="/account" class="font-semibold text-amber-900 underline">
@@ -54,7 +55,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
         </div>
       }
 
-      @if (!isLoadingSources && !sourceLoadError && currentAccount?.hasScanned) {
+      @if (!isLoadingSources() && !sourceLoadError() && currentAccount()?.hasScanned) {
       <div class="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
         <div>
           <p class="mb-3 text-sm font-semibold text-gray-700">ソート</p>
@@ -196,7 +197,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </article>
         } @empty {
           <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-500">
-            @if (sourcesSnapshot.length === 0) {
+            @if (sourcesSnapshot().length === 0) {
               このアカウントの登録先候補はまだありません。
             } @else {
               条件に一致する登録先候補はありません。
@@ -211,14 +212,15 @@ import { RegistrationSource } from '../../../../models/registration-source.model
 export class SourcesComponent implements OnInit {
   private accountService = inject(AccountService);
   private sourceService = inject(SourceService);
+  private route = inject(ActivatedRoute);
 
-  currentAccount = this.accountService.getCurrentAccount();
-  sourcesSnapshot: RegistrationSource[] = [];
-  isLoadingSources = false;
-  sourceLoadError = '';
+  currentAccount = signal<AccountViewModel | undefined>(this.accountService.getCurrentAccount());
+  sourcesSnapshot = signal<RegistrationSource[]>([]);
+  isLoadingSources = signal(false);
+  sourceLoadError = signal('');
 
   get urgentCount(): number {
-    return this.sourcesSnapshot.filter((source) => source.isUrgent).length;
+    return this.sourcesSnapshot().filter((source) => source.isUrgent).length;
   }
 
   selectedCategory: 'all' | 'newsletter' | 'payment' | 'account' | 'other' = 'all';
@@ -271,29 +273,39 @@ export class SourcesComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    this.isLoadingSources = true;
-    this.sourceLoadError = '';
+    this.isLoadingSources.set(true);
+    this.sourceLoadError.set('');
 
     try {
-      await this.accountService.loadAccounts();
-      this.currentAccount = this.accountService.getCurrentAccount();
+      const requestedAccountId = this.route.snapshot.queryParamMap.get('accountId');
 
-      if (!this.currentAccount || !this.currentAccount.hasScanned) {
-        this.sourcesSnapshot = [];
+      await this.accountService.loadAccounts();
+
+      if (
+        requestedAccountId &&
+        this.accountService.getAccountsSnapshot().some((account) => account.id === requestedAccountId)
+      ) {
+        this.accountService.switchAccount(requestedAccountId);
+      }
+
+      this.currentAccount.set(this.accountService.getCurrentAccount());
+
+      if (!this.currentAccount() || !this.currentAccount()?.hasScanned) {
+        this.sourcesSnapshot.set([]);
         return;
       }
 
-      await this.sourceService.loadSources(this.currentAccount.id);
-      this.sourcesSnapshot = this.sourceService.getSourcesSnapshot();
+      await this.sourceService.loadSources(this.currentAccount()!.id);
+      this.sourcesSnapshot.set(this.sourceService.getSourcesSnapshot());
     } catch {
-      this.sourceLoadError = '登録先候補の読み込みに失敗しました。backendが起動しているか確認してください。';
+      this.sourceLoadError.set('登録先候補の読み込みに失敗しました。backendが起動しているか確認してください。');
     } finally {
-      this.isLoadingSources = false;
+      this.isLoadingSources.set(false);
     }
   }
 
   get filteredSources() {
-    const filtered = this.sourcesSnapshot.filter((source) => {
+    const filtered = this.sourcesSnapshot().filter((source) => {
       if (this.selectedCategory !== 'all' && source.category !== this.selectedCategory) {
         return false;
       }
