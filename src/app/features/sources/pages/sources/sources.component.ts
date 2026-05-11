@@ -155,7 +155,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
       }
 
       <div class="space-y-3">
-        @for (source of filteredSources; track source.id) {
+        @for (source of paginatedSources; track source.id) {
           <article class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between gap-4">
               <div>
@@ -187,7 +187,7 @@ import { RegistrationSource } from '../../../../models/registration-source.model
                 rel="noopener noreferrer"
                 class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
-                Gmailで検索
+                {{ source.isUrgent ? '至急メールを検索' : 'Gmailで検索' }}
               </a>
             </div>
 
@@ -205,6 +205,51 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </div>
         }
       </div>
+
+      @if (filteredSources.length > pageSize) {
+        <nav
+          class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4"
+          aria-label="登録先候補のページネーション"
+        >
+          <p class="text-sm text-gray-600">
+            {{ pageStartItem }}-{{ pageEndItem }}件目 / {{ filteredSources.length }}件
+          </p>
+
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="currentPage() === 1"
+              (click)="goToPreviousPage()"
+            >
+              前へ
+            </button>
+
+            @for (page of visiblePages; track page) {
+              <button
+                type="button"
+                class="h-9 min-w-9 rounded-lg px-3 text-sm font-semibold transition"
+                [class.bg-blue-600]="currentPage() === page"
+                [class.text-white]="currentPage() === page"
+                [class.bg-gray-100]="currentPage() !== page"
+                [class.text-gray-700]="currentPage() !== page"
+                (click)="goToPage(page)"
+              >
+                {{ page }}
+              </button>
+            }
+
+            <button
+              type="button"
+              class="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="currentPage() === totalPages"
+              (click)="goToNextPage()"
+            >
+              次へ
+            </button>
+          </div>
+        </nav>
+      }
       }
     </section>
   `,
@@ -218,6 +263,8 @@ export class SourcesComponent implements OnInit {
   sourcesSnapshot = signal<RegistrationSource[]>([]);
   isLoadingSources = signal(false);
   sourceLoadError = signal('');
+  currentPage = signal(1);
+  readonly pageSize = 5;
 
   get urgentCount(): number {
     return this.sourcesSnapshot().filter((source) => source.isUrgent).length;
@@ -346,6 +393,58 @@ export class SourcesComponent implements OnInit {
     });
   }
 
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredSources.length / this.pageSize));
+  }
+
+  get paginatedSources(): RegistrationSource[] {
+    this.ensureCurrentPageInRange();
+
+    const startIndex = (this.currentPage() - 1) * this.pageSize;
+    return this.filteredSources.slice(startIndex, startIndex + this.pageSize);
+  }
+
+  get pageStartItem(): number {
+    if (this.filteredSources.length === 0) {
+      return 0;
+    }
+
+    return (this.currentPage() - 1) * this.pageSize + 1;
+  }
+
+  get pageEndItem(): number {
+    return Math.min(this.currentPage() * this.pageSize, this.filteredSources.length);
+  }
+
+  get visiblePages(): number[] {
+    const pages: number[] = [];
+
+    for (let page = 1; page <= this.totalPages; page += 1) {
+      pages.push(page);
+    }
+
+    return pages;
+  }
+
+  goToPage(page: number): void {
+    const nextPage = Math.min(Math.max(page, 1), this.totalPages);
+    this.currentPage.set(nextPage);
+  }
+
+  goToPreviousPage(): void {
+    this.goToPage(this.currentPage() - 1);
+  }
+
+  goToNextPage(): void {
+    this.goToPage(this.currentPage() + 1);
+  }
+
+  private ensureCurrentPageInRange(): void {
+    if (this.currentPage() > this.totalPages) {
+      this.currentPage.set(this.totalPages);
+    }
+  }
+
   private isWithinSelectedPeriod(date: Date): boolean {
     if (this.selectedPeriod === 'all') {
       return true;
@@ -421,14 +520,20 @@ export class SourcesComponent implements OnInit {
   }
 
   private getGmailSearchQuery(source: RegistrationSource): string {
+    const urgentQuery = '{overdue failed suspended "action required" urgent 至急 失敗 停止 要対応}';
+
     if (source.gmailQuery) {
+      if (source.isUrgent) {
+        return `${source.gmailQuery} ${urgentQuery}`;
+      }
+
       return source.gmailQuery;
     }
 
     const baseQuery = `from:${source.senderEmail} newer_than:2y`;
 
     if (source.isUrgent) {
-      return `${baseQuery} {overdue failed suspended "action required" urgent}`;
+      return `${baseQuery} ${urgentQuery}`;
     }
 
     if (source.category === 'payment') {
