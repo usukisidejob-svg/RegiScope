@@ -28,6 +28,19 @@ type GmailMessageCandidate = {
 
 const MAX_MESSAGES_TO_SCAN = 200;
 const MESSAGE_DETAIL_BATCH_SIZE = 5;
+const IGNORED_SENDER_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.co.jp',
+]);
 
 export async function detectRegistrationSources({
   gmail,
@@ -111,10 +124,16 @@ function toGmailMessageCandidate(message: gmail_v1.Schema$Message): GmailMessage
     return null;
   }
 
+  const normalizedDomain = normalizeSenderDomain(parsedSender.email);
+
+  if (!normalizedDomain || IGNORED_SENDER_DOMAINS.has(normalizedDomain)) {
+    return null;
+  }
+
   return {
     senderEmail: parsedSender.email,
     senderName: parsedSender.name,
-    domain: parsedSender.email.split('@')[1],
+    domain: normalizedDomain,
     subject,
     date: dateHeader ? new Date(dateHeader) : null,
   };
@@ -190,7 +209,7 @@ function buildRegistrationSources(candidates: GmailMessageCandidate[]): Detected
 }
 
 function normalizeDisplayName(senderName: string | null, domain: string): string {
-  if (senderName) {
+  if (senderName && !/^(no-?reply|notification|notifications|info|support)$/i.test(senderName)) {
     return senderName;
   }
 
@@ -198,6 +217,30 @@ function normalizeDisplayName(senderName: string | null, domain: string): string
     .split('.')[0]
     .replace(/[-_]/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeSenderDomain(email: string): string | null {
+  const rawDomain = email.split('@')[1]?.toLowerCase();
+
+  if (!rawDomain) {
+    return null;
+  }
+
+  const domain = rawDomain.replace(/^(mail|email|notify|notification|notifications|newsletter|news|bounce)\./, '');
+  const parts = domain.split('.').filter(Boolean);
+
+  if (parts.length <= 2) {
+    return domain;
+  }
+
+  const lastTwoParts = parts.slice(-2).join('.');
+  const lastThreeParts = parts.slice(-3).join('.');
+
+  if (/^(co|ne|or|ac|go)\.jp$/.test(lastTwoParts)) {
+    return lastThreeParts;
+  }
+
+  return lastTwoParts;
 }
 
 function detectCategory(messages: GmailMessageCandidate[]): string {
