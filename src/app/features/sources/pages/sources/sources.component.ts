@@ -162,10 +162,13 @@ import { RegistrationSource } from '../../../../models/registration-source.model
                   {{ source.displayName }}
                 </h2>
                 <p class="text-sm text-gray-500">
-                  {{ source.domain }}
+                  {{ source.domain }} ・ {{ source.senderEmail }}
                 </p>
                 <p class="mt-1 text-sm text-gray-500">
                   頻度: {{ getFrequencyLabel(source) }}
+                </p>
+                <p class="mt-1 text-sm text-gray-500">
+                  検出: {{ source.frequency.count }}件 ・ 最終: {{ formatDate(source.lastSeen) }}
                 </p>
               </div>
 
@@ -193,7 +196,11 @@ import { RegistrationSource } from '../../../../models/registration-source.model
           </article>
         } @empty {
           <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-500">
-            このアカウントの登録先候補はまだありません。
+            @if (sourcesSnapshot.length === 0) {
+              このアカウントの登録先候補はまだありません。
+            } @else {
+              条件に一致する登録先候補はありません。
+            }
           </div>
         }
       </div>
@@ -385,6 +392,14 @@ export class SourcesComponent implements OnInit {
     }
 
     return `${source.frequency.period}日間で${source.frequency.count}回`;
+  }
+
+  formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
   }
 
   getGmailSearchUrl(source: RegistrationSource): string {
