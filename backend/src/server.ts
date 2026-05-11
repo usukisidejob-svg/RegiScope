@@ -91,6 +91,28 @@ app.delete('/api/accounts/:accountId', async (req, res) => {
   const { accountId } = req.params;
 
   try {
+    const account = await prisma.account.findUnique({
+      where: {
+        id: accountId,
+      },
+      include: {
+        oauthToken: true,
+      },
+    });
+
+    if (!account) {
+      res.status(204).send();
+      return;
+    }
+
+    const tokenToRevoke = account.oauthToken?.refreshToken ?? account.oauthToken?.accessToken;
+
+    if (tokenToRevoke) {
+      await googleOAuthClient.revokeToken(tokenToRevoke).catch((error) => {
+        console.error('Failed to revoke Google OAuth token:', error);
+      });
+    }
+
     await prisma.account.delete({
       where: {
         id: accountId,
