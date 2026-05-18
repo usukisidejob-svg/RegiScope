@@ -35,6 +35,9 @@ const gmailScopes = [
   'https://www.googleapis.com/auth/gmail.readonly',
 ];
 
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const pendingOAuthStates = new Map<string, number>();
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
@@ -55,7 +58,7 @@ app.get('/api/auth/google/url', (_req, res) => {
     return;
   }
 
-  const state = randomUUID();
+  const state = createOAuthState();
 
   const authUrl = googleOAuthClient.generateAuthUrl({
     access_type: 'offline',
@@ -168,28 +171,34 @@ app.patch('/api/accounts/:accountId/scan', async (req, res) => {
       auth: accountOAuthClient,
     });
 
-    const account = await prisma.account.update({
-      where: {
-        id: accountId,
-      },
-      data: {
-        hasScanned: true,
-        lastScanDate: new Date(),
-      },
-    });
     const detectedSources = await detectRegistrationSources({ gmail });
+    const lastScanDate = new Date();
 
-    await prisma.registrationSource.deleteMany({
-      where: {
-        accountId,
-      },
-    });
+    const account = await prisma.$transaction(async (tx) => {
+      await tx.registrationSource.deleteMany({
+        where: {
+          accountId,
+        },
+      });
 
-    await prisma.registrationSource.createMany({
-      data: detectedSources.map((source) => ({
-        accountId,
-        ...source,
-      })),
+      if (detectedSources.length > 0) {
+        await tx.registrationSource.createMany({
+          data: detectedSources.map((source) => ({
+            accountId,
+            ...source,
+          })),
+        });
+      }
+
+      return tx.account.update({
+        where: {
+          id: accountId,
+        },
+        data: {
+          hasScanned: true,
+          lastScanDate,
+        },
+      });
     });
 
     res.json(account);
@@ -236,11 +245,20 @@ app.get('/api/accounts/:accountId/sources', async (req, res) => {
 
 app.get('/api/auth/google/callback', async (req, res) => {
   const code = req.query.code;
+  const state = req.query.state;
   let callbackStep = 'validate_code';
 
   if (typeof code !== 'string') {
     res.status(400).json({
       error: 'Authorization code is missing.',
+    });
+    return;
+  }
+
+  callbackStep = 'validate_state';
+  if (!consumeOAuthState(state)) {
+    res.status(400).json({
+      error: 'OAuth state is missing, expired, or invalid.',
     });
     return;
   }
@@ -325,6 +343,36 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.listen(port, () => {
   console.log(`API server running on http://localhost:${port}`);
 });
+
+function createOAuthState(): string {
+  pruneExpiredOAuthStates();
+
+  const state = randomUUID();
+  pendingOAuthStates.set(state, Date.now() + OAUTH_STATE_TTL_MS);
+
+  return state;
+}
+
+function consumeOAuthState(state: unknown): boolean {
+  if (typeof state !== 'string') {
+    return false;
+  }
+
+  const expiresAt = pendingOAuthStates.get(state);
+  pendingOAuthStates.delete(state);
+
+  return expiresAt !== undefined && expiresAt > Date.now();
+}
+
+function pruneExpiredOAuthStates(): void {
+  const now = Date.now();
+
+  for (const [state, expiresAt] of pendingOAuthStates) {
+    if (expiresAt <= now) {
+      pendingOAuthStates.delete(state);
+    }
+  }
+}
 
 function isGoogleReauthRequiredError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
